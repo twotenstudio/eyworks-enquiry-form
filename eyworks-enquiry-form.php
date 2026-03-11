@@ -1,23 +1,57 @@
 <?php
 /**
  * Plugin Name: EYWorks Enquiry Form
- * Description: Custom enquiry form for The Working Mums Club with EYWorks API integration, GTM tracking, local storage, and admin dashboard.
- * Version: 2.1.0
+ * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
+ * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
+ * Version: 2.2.0
  * Author: Two Ten Studio
+ * Author URI: https://twotenstudio.co.uk
+ * License: GPL-2.0+
+ * Text Domain: eyworks-enquiry-form
  */
 
 if (!defined('ABSPATH')) exit;
 
-// ─── CONFIGURATION ───────────────────────────────────────────────
-if (!defined('EYWORKS_API_TOKEN')) {
-    define('EYWORKS_API_TOKEN', 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjdXN0b21lciI6InRoZXdvcmtpbmdtdW1zY2x1Yi5leWxvZy5jby51ayIsImFjY2VzcyI6WyJlbnF1aXJpZXMiXX0.0FsvW5iCuhUy66lr4hUFDSD3lJ1r-9He2rfP24L0i_w');
+define('EYWORKS_PLUGIN_VERSION', '2.2.0');
+define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+
+// ─── SETTINGS HELPERS ────────────────────────────────────────────
+// wp-config.php constants take priority, then Settings page values
+
+function eyworks_get_setting($key, $default = '') {
+    $settings = get_option('eyworks_settings', []);
+    return !empty($settings[$key]) ? $settings[$key] : $default;
 }
 
-define('EYWORKS_API_BASE', 'https://theworkingmumsclub.eylog.co.uk/eyMan/index.php/api');
+function eyworks_api_token() {
+    if (defined('EYWORKS_API_TOKEN') && EYWORKS_API_TOKEN) return EYWORKS_API_TOKEN;
+    return eyworks_get_setting('api_token');
+}
 
-// Email address for notifications (comma-separate for multiple)
-if (!defined('EYWORKS_NOTIFY_EMAIL')) {
-    define('EYWORKS_NOTIFY_EMAIL', get_option('admin_email'));
+function eyworks_api_base() {
+    if (defined('EYWORKS_API_BASE') && EYWORKS_API_BASE) return EYWORKS_API_BASE;
+    $subdomain = eyworks_get_setting('subdomain');
+    if (empty($subdomain)) return '';
+    // Strip protocol and trailing slashes if user pasted full URL
+    $subdomain = preg_replace('#^https?://#', '', $subdomain);
+    $subdomain = rtrim($subdomain, '/');
+    // If it already contains eylog.co.uk, use as-is
+    if (strpos($subdomain, 'eylog.co.uk') !== false) {
+        return 'https://' . $subdomain . '/eyMan/index.php/api';
+    }
+    return 'https://' . $subdomain . '.eylog.co.uk/eyMan/index.php/api';
+}
+
+function eyworks_notify_email() {
+    if (defined('EYWORKS_NOTIFY_EMAIL') && EYWORKS_NOTIFY_EMAIL) return EYWORKS_NOTIFY_EMAIL;
+    $email = eyworks_get_setting('notify_email');
+    return !empty($email) ? $email : get_option('admin_email');
+}
+
+function eyworks_is_configured() {
+    return !empty(eyworks_api_token()) && !empty(eyworks_api_base());
 }
 
 
@@ -57,21 +91,169 @@ function eyworks_create_table() {
     dbDelta($sql);
 }
 
-
-// ─── AUTO-CREATE TABLE (runs once, no deactivation needed) ───────
+// Auto-create table (no deactivation needed)
 add_action('admin_init', function () {
-    if (get_option('eyworks_db_version') !== '2.1.0') {
+    if (get_option('eyworks_db_version') !== EYWORKS_PLUGIN_VERSION) {
         eyworks_create_table();
-        update_option('eyworks_db_version', '2.1.0');
+        update_option('eyworks_db_version', EYWORKS_PLUGIN_VERSION);
     }
 });
 
+
+// ─── SETTINGS PAGE ──────────────────────────────────────────────
+add_action('admin_menu', function () {
+    // Enquiries dashboard
+    add_menu_page(
+        'Tour Enquiries',
+        'Tour Enquiries',
+        'manage_options',
+        'eyworks-enquiries',
+        'eyworks_admin_page',
+        'dashicons-clipboard',
+        26
+    );
+
+    // Settings submenu
+    add_submenu_page(
+        'eyworks-enquiries',
+        'EYWorks Settings',
+        'Settings',
+        'manage_options',
+        'eyworks-settings',
+        'eyworks_settings_page'
+    );
+});
+
+add_action('admin_init', function () {
+    register_setting('eyworks_settings_group', 'eyworks_settings', [
+        'sanitize_callback' => 'eyworks_sanitize_settings',
+    ]);
+
+    // Connection section
+    add_settings_section(
+        'eyworks_connection',
+        'EYWorks Connection',
+        function () {
+            echo '<p>Enter your EYWorks API credentials. You can find these in your EYWorks dashboard under <strong>Settings → Access Token → Enquiries</strong>.</p>';
+        },
+        'eyworks-settings'
+    );
+
+    add_settings_field('subdomain', 'EYWorks Subdomain', function () {
+        $val = eyworks_get_setting('subdomain');
+        $disabled = defined('EYWORKS_API_BASE') ? ' disabled' : '';
+        echo '<input type="text" name="eyworks_settings[subdomain]" value="' . esc_attr($val) . '" class="regular-text" placeholder="e.g. myNursery"' . $disabled . '>';
+        echo '<p class="description">Your EYWorks subdomain — the part before <code>.eylog.co.uk</code>. For example, if your EYWorks URL is <code>mynursery.eylog.co.uk</code>, enter <strong>mynursery</strong>.</p>';
+        if (defined('EYWORKS_API_BASE')) {
+            echo '<p class="description" style="color:#d63638;">Currently overridden by <code>EYWORKS_API_BASE</code> in wp-config.php</p>';
+        }
+    }, 'eyworks-settings', 'eyworks_connection');
+
+    add_settings_field('api_token', 'API Token', function () {
+        $val = eyworks_get_setting('api_token');
+        $disabled = defined('EYWORKS_API_TOKEN') ? ' disabled' : '';
+        $display_val = $disabled ? '••••••••••••••••••••' : esc_attr($val);
+        echo '<input type="' . ($disabled ? 'text' : 'password') . '" name="eyworks_settings[api_token]" value="' . $display_val . '" class="large-text" placeholder="Paste your Enquiries API token here"' . $disabled . '>';
+        echo '<p class="description">The Enquiries access token from your EYWorks dashboard.</p>';
+        if (defined('EYWORKS_API_TOKEN')) {
+            echo '<p class="description" style="color:#d63638;">Currently overridden by <code>EYWORKS_API_TOKEN</code> in wp-config.php</p>';
+        }
+    }, 'eyworks-settings', 'eyworks_connection');
+
+    // Notification section
+    add_settings_section(
+        'eyworks_notifications',
+        'Notifications',
+        function () {
+            echo '<p>Configure email notifications for new enquiries.</p>';
+        },
+        'eyworks-settings'
+    );
+
+    add_settings_field('notify_email', 'Notification Email', function () {
+        $val = eyworks_get_setting('notify_email', get_option('admin_email'));
+        $disabled = defined('EYWORKS_NOTIFY_EMAIL') ? ' disabled' : '';
+        echo '<input type="email" name="eyworks_settings[notify_email]" value="' . esc_attr($val) . '" class="regular-text"' . $disabled . '>';
+        echo '<p class="description">Email address to receive new enquiry notifications. Defaults to the site admin email.</p>';
+        if (defined('EYWORKS_NOTIFY_EMAIL')) {
+            echo '<p class="description" style="color:#d63638;">Currently overridden by <code>EYWORKS_NOTIFY_EMAIL</code> in wp-config.php</p>';
+        }
+    }, 'eyworks-settings', 'eyworks_notifications');
+});
+
+function eyworks_sanitize_settings($input) {
+    $sanitized = [];
+    $sanitized['subdomain']    = sanitize_text_field($input['subdomain'] ?? '');
+    $sanitized['api_token']    = sanitize_text_field($input['api_token'] ?? '');
+    $sanitized['notify_email'] = sanitize_email($input['notify_email'] ?? '');
+
+    // Clear metadata cache when settings change (so new nursery/source data loads)
+    delete_transient('eyworks_enquiry_metadata');
+
+    return $sanitized;
+}
+
+function eyworks_settings_page() {
+    ?>
+    <div class="wrap">
+        <h1>EYWorks Settings</h1>
+
+        <?php
+        // Connection status
+        if (eyworks_is_configured()) {
+            $meta = eyworks_get_metadata();
+            if ($meta) {
+                $nursery_name = $meta['nursery'][0]['name'] ?? 'Unknown';
+                echo '<div class="notice notice-success"><p><strong>&#10003; Connected to EYWorks</strong> — Nursery: ' . esc_html($nursery_name) . '</p></div>';
+            } else {
+                echo '<div class="notice notice-warning"><p><strong>&#9888; Connection issue</strong> — Credentials are set but could not fetch data from EYWorks. Please check your subdomain and API token.</p></div>';
+            }
+        } else {
+            echo '<div class="notice notice-error"><p><strong>&#10007; Not connected</strong> — Please enter your EYWorks subdomain and API token below.</p></div>';
+        }
+        ?>
+
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('eyworks_settings_group');
+            do_settings_sections('eyworks-settings');
+            submit_button('Save Settings');
+            ?>
+        </form>
+
+        <hr>
+        <h2>Shortcode</h2>
+        <p>Add the enquiry form to any page or post using this shortcode:</p>
+        <p><code>[eyworks_enquiry_form]</code></p>
+        <p>The form fields (sources, nurseries, sessions) are automatically loaded from your EYWorks account.</p>
+
+        <hr>
+        <h2>GTM Tracking</h2>
+        <p>The form fires three <code>dataLayer</code> events for Google Tag Manager:</p>
+        <table class="widefat" style="max-width:600px;">
+            <thead><tr><th>Event</th><th>When</th></tr></thead>
+            <tbody>
+                <tr><td><code>tour_booking_attempted</code></td><td>User clicks Submit</td></tr>
+                <tr><td><code>tour_booking_submitted</code></td><td>Enquiry saved successfully</td></tr>
+                <tr><td><code>tour_booking_error</code></td><td>Submission failed</td></tr>
+            </tbody>
+        </table>
+        <p style="margin-top:10px;">UTM parameters from the page URL are automatically captured and sent to EYWorks.</p>
+
+        <?php if (defined('EYWORKS_API_TOKEN') || defined('EYWORKS_API_BASE') || defined('EYWORKS_NOTIFY_EMAIL')): ?>
+        <hr>
+        <h2>wp-config.php Overrides Active</h2>
+        <p>Some settings are currently defined in <code>wp-config.php</code> and cannot be changed from this screen. Remove the constants from wp-config.php to manage them here instead.</p>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+
 // ─── ENQUEUE STYLES & SCRIPTS ────────────────────────────────────
-// Enqueued via shortcode callback to work with any page builder
 add_action('wp_enqueue_scripts', function () {
-    // Register (don't enqueue yet) — the shortcode will enqueue them
-    wp_register_style('eyworks-form-css', plugin_dir_url(__FILE__) . 'eyworks-form.css', [], '2.1.0');
-    wp_register_script('eyworks-form-js', plugin_dir_url(__FILE__) . 'eyworks-form.js', [], '2.1.0', true);
+    wp_register_style('eyworks-form-css', EYWORKS_PLUGIN_URL . 'eyworks-form.css', [], EYWORKS_PLUGIN_VERSION);
+    wp_register_script('eyworks-form-js', EYWORKS_PLUGIN_URL . 'eyworks-form.js', [], EYWORKS_PLUGIN_VERSION, true);
     wp_localize_script('eyworks-form-js', 'eyworksForm', [
         'ajaxUrl' => admin_url('admin-ajax.php'),
         'nonce'   => wp_create_nonce('eyworks_enquiry_nonce'),
@@ -81,13 +263,15 @@ add_action('wp_enqueue_scripts', function () {
 
 // ─── HELPER: Get metadata from EYWorks (cached 12h) ─────────────
 function eyworks_get_metadata() {
+    if (!eyworks_is_configured()) return null;
+
     $cached = get_transient('eyworks_enquiry_metadata');
     if ($cached) return $cached;
 
-    $response = wp_remote_get(EYWORKS_API_BASE . '/enquirySettings', [
+    $response = wp_remote_get(eyworks_api_base() . '/enquirySettings', [
         'timeout' => 15,
         'headers' => [
-            'Authorization' => 'Bearer ' . EYWORKS_API_TOKEN,
+            'Authorization' => 'Bearer ' . eyworks_api_token(),
             'Content-Type'  => 'application/json',
         ],
     ]);
@@ -109,7 +293,15 @@ function eyworks_get_metadata() {
 
 // ─── SHORTCODE ───────────────────────────────────────────────────
 add_shortcode('eyworks_enquiry_form', function () {
-    // Enqueue the registered scripts/styles when shortcode is actually rendered
+    if (!eyworks_is_configured()) {
+        if (current_user_can('manage_options')) {
+            return '<div class="eyworks-error" style="padding:1rem;border:1px solid #fecaca;border-radius:6px;background:#fef2f2;color:#991b1b;">
+                <p><strong>EYWorks Enquiry Form:</strong> Not configured yet. <a href="' . admin_url('admin.php?page=eyworks-settings') . '">Go to Settings</a> to connect your EYWorks account.</p>
+            </div>';
+        }
+        return ''; // Hide from visitors if not configured
+    }
+
     wp_enqueue_style('eyworks-form-css');
     wp_enqueue_script('eyworks-form-js');
 
@@ -123,17 +315,6 @@ add_shortcode('eyworks_enquiry_form', function () {
     if (!empty($meta['source'])) {
         foreach ($meta['source'] as $s) {
             $source_options .= '<option value="' . esc_attr($s['id']) . '">' . esc_html(trim($s['name'])) . '</option>';
-        }
-    } else {
-        $source_map = [
-            1 => 'College / Uni / NHS', 2 => 'Existing Parent', 7 => 'Friend / Family',
-            8 => 'Health Professional', 3 => 'Marketing - Leaflet', 14 => 'Marketing - Newspaper / Magazine',
-            4 => 'Marketing - Poster', 5 => 'Marketing - Seen signs', 9 => 'Marketing - TV in hospitals',
-            13 => 'Marketing - Website', 6 => 'Passing By', 15 => 'Search Engine (Google, Bing, Other)',
-            10 => 'Shows / Exhibitions', 11 => 'Staff', 12 => 'Staff on Pickup',
-        ];
-        foreach ($source_map as $id => $name) {
-            $source_options .= '<option value="' . base64_encode($id) . '">' . esc_html($name) . '</option>';
         }
     }
 
@@ -260,6 +441,10 @@ function eyworks_handle_submission() {
         wp_send_json_error(['message' => 'Security check failed. Please refresh and try again.']);
     }
 
+    if (!eyworks_is_configured()) {
+        wp_send_json_error(['message' => 'The enquiry form is not configured yet.']);
+    }
+
     // Sanitize
     $nursery           = sanitize_text_field($_POST['nursery'] ?? '');
     $first_name        = sanitize_text_field($_POST['first_name'] ?? '');
@@ -313,7 +498,7 @@ function eyworks_handle_submission() {
     if (!empty($source))           $payload['source'] = $source;
 
     // ─── POST to EYWorks ─────────────────────────────────────────
-    $api_url   = EYWORKS_API_BASE . '/enquiryPost';
+    $api_url   = eyworks_api_base() . '/enquiryPost';
     $json_body = wp_json_encode($payload);
 
     error_log('[EYWorks] POST ' . $api_url);
@@ -322,7 +507,7 @@ function eyworks_handle_submission() {
     $response = wp_remote_post($api_url, [
         'timeout' => 30,
         'headers' => [
-            'Authorization' => 'Bearer ' . EYWORKS_API_TOKEN,
+            'Authorization' => 'Bearer ' . eyworks_api_token(),
             'Content-Type'  => 'application/json',
         ],
         'body' => $json_body,
@@ -350,7 +535,6 @@ function eyworks_handle_submission() {
     global $wpdb;
     $table = $wpdb->prefix . 'eyworks_enquiries';
 
-    // Ensure table exists (failsafe — creates if missing)
     if ($wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table) {
         error_log('[EYWorks] Table missing — creating now');
         eyworks_create_table();
@@ -381,8 +565,7 @@ function eyworks_handle_submission() {
     if ($insert_result === false) {
         error_log('[EYWorks] DB insert FAILED: ' . $wpdb->last_error);
     } else {
-        $local_id = $wpdb->insert_id;
-        error_log('[EYWorks] Local entry saved: #' . $local_id . ' (EYWorks: ' . $eyworks_status . ')');
+        error_log('[EYWorks] Local entry saved: #' . $wpdb->insert_id . ' (EYWorks: ' . $eyworks_status . ')');
     }
 
     // ─── Send email notification ─────────────────────────────────
@@ -402,7 +585,6 @@ function eyworks_handle_submission() {
     if ($eyworks_status === 'sent') {
         wp_send_json_success(['message' => 'Enquiry submitted successfully.']);
     } else {
-        // Still saved locally — show success to user but log the EYWorks issue
         wp_send_json_success(['message' => 'Enquiry received — thank you!']);
     }
 }
@@ -410,7 +592,7 @@ function eyworks_handle_submission() {
 
 // ─── EMAIL NOTIFICATION ──────────────────────────────────────────
 function eyworks_send_notification_email($data) {
-    $to      = EYWORKS_NOTIFY_EMAIL;
+    $to      = eyworks_notify_email();
     $subject = 'New Tour Enquiry: ' . $data['child_name'];
 
     $body  = "A new tour enquiry has been submitted.\n\n";
@@ -426,26 +608,11 @@ function eyworks_send_notification_email($data) {
 
     $body .= "\n---\nView all enquiries in WordPress: " . admin_url('admin.php?page=eyworks-enquiries');
 
-    $headers = ['Content-Type: text/plain; charset=UTF-8'];
-
-    wp_mail($to, $subject, $body, $headers);
+    wp_mail($to, $subject, $body, ['Content-Type: text/plain; charset=UTF-8']);
 }
 
 
-// ─── ADMIN DASHBOARD ─────────────────────────────────────────────
-add_action('admin_menu', function () {
-    add_menu_page(
-        'Tour Enquiries',
-        'Tour Enquiries',
-        'manage_options',
-        'eyworks-enquiries',
-        'eyworks_admin_page',
-        'dashicons-clipboard',
-        26
-    );
-});
-
-// CSV export must run BEFORE any HTML is output
+// ─── CSV EXPORT (runs before HTML output) ────────────────────────
 add_action('admin_init', function () {
     if (!isset($_GET['page']) || $_GET['page'] !== 'eyworks-enquiries') return;
     if (!isset($_GET['action']) || $_GET['action'] !== 'export') return;
@@ -456,11 +623,48 @@ add_action('admin_init', function () {
     exit;
 });
 
+function eyworks_export_csv() {
+    global $wpdb;
+    $table   = $wpdb->prefix . 'eyworks_enquiries';
+    $entries = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC", ARRAY_A);
+
+    while (ob_get_level()) { ob_end_clean(); }
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=tour-enquiries-' . date('Y-m-d') . '.csv');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    $output = fopen('php://output', 'w');
+
+    fputcsv($output, [
+        'ID', 'Child First Name', 'Child Last Name', 'Child DOB', 'Gender',
+        'Parent First Name', 'Parent Last Name', 'Email', 'Phone', 'Postcode',
+        'Preferred Start', 'Source', 'UTM Source', 'UTM Medium', 'UTM Campaign',
+        'EYWorks Status', 'EYWorks Ref', 'Date',
+    ]);
+
+    foreach ($entries as $row) {
+        fputcsv($output, [
+            $row['id'], $row['child_first_name'], $row['child_last_name'],
+            $row['child_dob'], $row['child_gender'], $row['parent_first_name'],
+            $row['parent_last_name'], $row['parent_email'], $row['phone'],
+            $row['postcode'], $row['start_date'], $row['source'],
+            $row['utm_source'], $row['utm_medium'], $row['utm_campaign'],
+            $row['eyworks_status'], $row['eyworks_ref'], $row['created_at'],
+        ]);
+    }
+
+    fclose($output);
+    die();
+}
+
+
+// ─── ADMIN DASHBOARD ─────────────────────────────────────────────
 function eyworks_admin_page() {
     global $wpdb;
     $table = $wpdb->prefix . 'eyworks_enquiries';
 
-    // Handle delete
     if (isset($_GET['action']) && $_GET['action'] === 'delete' && !empty($_GET['id'])) {
         if (wp_verify_nonce($_GET['_wpnonce'] ?? '', 'eyworks_delete_' . intval($_GET['id']))) {
             $wpdb->delete($table, ['id' => intval($_GET['id'])]);
@@ -468,7 +672,6 @@ function eyworks_admin_page() {
         }
     }
 
-    // Search
     $search = sanitize_text_field($_GET['s'] ?? '');
     $where  = '';
     if (!empty($search)) {
@@ -479,19 +682,15 @@ function eyworks_admin_page() {
         );
     }
 
-    // Pagination
     $per_page    = 25;
     $current     = max(1, intval($_GET['paged'] ?? 1));
     $total       = $wpdb->get_var("SELECT COUNT(*) FROM $table $where");
     $total_pages = ceil($total / $per_page);
     $offset      = ($current - 1) * $per_page;
 
-    $entries = $wpdb->get_results(
-        "SELECT * FROM $table $where ORDER BY created_at DESC LIMIT $per_page OFFSET $offset"
-    );
+    $entries = $wpdb->get_results("SELECT * FROM $table $where ORDER BY created_at DESC LIMIT $per_page OFFSET $offset");
 
     $export_url = wp_nonce_url(admin_url('admin.php?page=eyworks-enquiries&action=export'), 'eyworks_export');
-
     ?>
     <style>
         .eyworks-detail-row td { padding: 0 !important; background: #f9f9f9; }
@@ -537,206 +736,61 @@ function eyworks_admin_page() {
             <tbody>
                 <?php if (empty($entries)): ?>
                     <tr><td colspan="10">No enquiries found.</td></tr>
-                <?php else: ?>
-                    <?php foreach ($entries as $e):
-                        $row_id = intval($e->id);
-                    ?>
-                        <tr>
-                            <td><?php echo $row_id; ?></td>
-                            <td>
-                                <strong><?php echo esc_html($e->child_first_name . ' ' . $e->child_last_name); ?></strong>
-                                <?php if ($e->child_dob): ?>
-                                    <br><small>DOB: <?php echo esc_html(date('d/m/Y', strtotime($e->child_dob))); ?></small>
-                                <?php endif; ?>
-                                <?php if ($e->child_gender): ?>
-                                    <br><small><?php echo esc_html($e->child_gender); ?></small>
-                                <?php endif; ?>
-                            </td>
-                            <td><?php echo esc_html(trim($e->parent_first_name . ' ' . $e->parent_last_name)); ?></td>
-                            <td><a href="mailto:<?php echo esc_attr($e->parent_email); ?>"><?php echo esc_html($e->parent_email); ?></a></td>
-                            <td><?php echo esc_html($e->phone); ?></td>
-                            <td><?php echo esc_html($e->source ?: '—'); ?></td>
-                            <td><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></td>
-                            <td>
-                                <?php if ($e->eyworks_status === 'sent'): ?>
-                                    <span style="color:#27ae60;">&#10003; Sent</span>
-                                <?php else: ?>
-                                    <span style="color:#e74c3c;">&#10007; Failed</span>
-                                <?php endif; ?>
-                            </td>
-                            <td><?php echo esc_html(date('d/m/Y H:i', strtotime($e->created_at))); ?></td>
-                            <td>
-                                <a href="#" class="eyworks-toggle" onclick="var d=document.getElementById('ew-detail-<?php echo $row_id; ?>');d.classList.toggle('visible');this.textContent=d.classList.contains('visible')?'Hide':'View';return false;">View</a>
-                                &nbsp;|&nbsp;
-                                <?php
-                                $del_url = wp_nonce_url(
-                                    admin_url('admin.php?page=eyworks-enquiries&action=delete&id=' . $row_id),
-                                    'eyworks_delete_' . $row_id
-                                );
-                                ?>
-                                <a href="<?php echo esc_url($del_url); ?>" onclick="return confirm('Delete this enquiry?');" style="color:#a00;">Delete</a>
-                            </td>
-                        </tr>
-                        <tr class="eyworks-detail-row">
-                            <td colspan="10">
-                                <div id="ew-detail-<?php echo $row_id; ?>" class="eyworks-detail-inner">
-                                    <dl class="eyworks-detail-grid">
-                                        <div>
-                                            <dt>Child Name</dt>
-                                            <dd><?php echo esc_html($e->child_first_name . ' ' . $e->child_last_name); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Date of Birth</dt>
-                                            <dd><?php echo $e->child_dob ? esc_html(date('d/m/Y', strtotime($e->child_dob))) : '—'; ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Gender</dt>
-                                            <dd><?php echo esc_html($e->child_gender ?: '—'); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Parent Name</dt>
-                                            <dd><?php echo esc_html(trim($e->parent_first_name . ' ' . $e->parent_last_name)); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Email</dt>
-                                            <dd><a href="mailto:<?php echo esc_attr($e->parent_email); ?>"><?php echo esc_html($e->parent_email); ?></a></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Phone</dt>
-                                            <dd><?php echo esc_html($e->phone); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Postcode</dt>
-                                            <dd><?php echo esc_html($e->postcode ?: '—'); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Preferred Start Date</dt>
-                                            <dd><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>Source</dt>
-                                            <dd><?php echo esc_html($e->source ?: '—'); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>EYWorks Status</dt>
-                                            <dd>
-                                                <?php if ($e->eyworks_status === 'sent'): ?>
-                                                    <span style="color:#27ae60;">&#10003; Sent</span>
-                                                    <?php if ($e->eyworks_ref): ?>
-                                                        <br><small>Ref: <?php echo esc_html($e->eyworks_ref); ?></small>
-                                                    <?php endif; ?>
-                                                <?php else: ?>
-                                                    <span style="color:#e74c3c;">&#10007; Failed</span>
-                                                <?php endif; ?>
-                                            </dd>
-                                        </div>
-                                        <?php if ($e->utm_source || $e->utm_medium || $e->utm_campaign): ?>
-                                        <div>
-                                            <dt>UTM Source</dt>
-                                            <dd><?php echo esc_html($e->utm_source ?: '—'); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>UTM Medium</dt>
-                                            <dd><?php echo esc_html($e->utm_medium ?: '—'); ?></dd>
-                                        </div>
-                                        <div>
-                                            <dt>UTM Campaign</dt>
-                                            <dd><?php echo esc_html($e->utm_campaign ?: '—'); ?></dd>
-                                        </div>
-                                        <?php if ($e->utm_content): ?>
-                                        <div>
-                                            <dt>UTM Content</dt>
-                                            <dd><?php echo esc_html($e->utm_content); ?></dd>
-                                        </div>
-                                        <?php endif; ?>
-                                        <?php if ($e->utm_term): ?>
-                                        <div>
-                                            <dt>UTM Term</dt>
-                                            <dd><?php echo esc_html($e->utm_term); ?></dd>
-                                        </div>
-                                        <?php endif; ?>
-                                        <?php endif; ?>
-                                        <div>
-                                            <dt>Submitted</dt>
-                                            <dd><?php echo esc_html(date('d/m/Y H:i:s', strtotime($e->created_at))); ?></dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
+                <?php else: foreach ($entries as $e): $row_id = intval($e->id); ?>
+                    <tr>
+                        <td><?php echo $row_id; ?></td>
+                        <td>
+                            <strong><?php echo esc_html($e->child_first_name . ' ' . $e->child_last_name); ?></strong>
+                            <?php if ($e->child_dob): ?><br><small>DOB: <?php echo esc_html(date('d/m/Y', strtotime($e->child_dob))); ?></small><?php endif; ?>
+                            <?php if ($e->child_gender): ?><br><small><?php echo esc_html($e->child_gender); ?></small><?php endif; ?>
+                        </td>
+                        <td><?php echo esc_html(trim($e->parent_first_name . ' ' . $e->parent_last_name)); ?></td>
+                        <td><a href="mailto:<?php echo esc_attr($e->parent_email); ?>"><?php echo esc_html($e->parent_email); ?></a></td>
+                        <td><?php echo esc_html($e->phone); ?></td>
+                        <td><?php echo esc_html($e->source ?: '—'); ?></td>
+                        <td><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></td>
+                        <td><?php echo $e->eyworks_status === 'sent' ? '<span style="color:#27ae60;">&#10003; Sent</span>' : '<span style="color:#e74c3c;">&#10007; Failed</span>'; ?></td>
+                        <td><?php echo esc_html(date('d/m/Y H:i', strtotime($e->created_at))); ?></td>
+                        <td>
+                            <a href="#" class="eyworks-toggle" onclick="var d=document.getElementById('ew-detail-<?php echo $row_id; ?>');d.classList.toggle('visible');this.textContent=d.classList.contains('visible')?'Hide':'View';return false;">View</a>
+                            &nbsp;|&nbsp;
+                            <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin.php?page=eyworks-enquiries&action=delete&id=' . $row_id), 'eyworks_delete_' . $row_id)); ?>" onclick="return confirm('Delete this enquiry?');" style="color:#a00;">Delete</a>
+                        </td>
+                    </tr>
+                    <tr class="eyworks-detail-row"><td colspan="10"><div id="ew-detail-<?php echo $row_id; ?>" class="eyworks-detail-inner"><dl class="eyworks-detail-grid">
+                        <div><dt>Child Name</dt><dd><?php echo esc_html($e->child_first_name . ' ' . $e->child_last_name); ?></dd></div>
+                        <div><dt>Date of Birth</dt><dd><?php echo $e->child_dob ? esc_html(date('d/m/Y', strtotime($e->child_dob))) : '—'; ?></dd></div>
+                        <div><dt>Gender</dt><dd><?php echo esc_html($e->child_gender ?: '—'); ?></dd></div>
+                        <div><dt>Parent Name</dt><dd><?php echo esc_html(trim($e->parent_first_name . ' ' . $e->parent_last_name)); ?></dd></div>
+                        <div><dt>Email</dt><dd><a href="mailto:<?php echo esc_attr($e->parent_email); ?>"><?php echo esc_html($e->parent_email); ?></a></dd></div>
+                        <div><dt>Phone</dt><dd><?php echo esc_html($e->phone); ?></dd></div>
+                        <div><dt>Postcode</dt><dd><?php echo esc_html($e->postcode ?: '—'); ?></dd></div>
+                        <div><dt>Preferred Start</dt><dd><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></dd></div>
+                        <div><dt>Source</dt><dd><?php echo esc_html($e->source ?: '—'); ?></dd></div>
+                        <div><dt>EYWorks</dt><dd><?php echo $e->eyworks_status === 'sent' ? '<span style="color:#27ae60;">&#10003; Sent</span>' . ($e->eyworks_ref ? '<br><small>Ref: ' . esc_html($e->eyworks_ref) . '</small>' : '') : '<span style="color:#e74c3c;">&#10007; Failed</span>'; ?></dd></div>
+                        <?php if ($e->utm_source || $e->utm_medium || $e->utm_campaign): ?>
+                        <div><dt>UTM Source</dt><dd><?php echo esc_html($e->utm_source ?: '—'); ?></dd></div>
+                        <div><dt>UTM Medium</dt><dd><?php echo esc_html($e->utm_medium ?: '—'); ?></dd></div>
+                        <div><dt>UTM Campaign</dt><dd><?php echo esc_html($e->utm_campaign ?: '—'); ?></dd></div>
+                        <?php endif; ?>
+                        <div><dt>Submitted</dt><dd><?php echo esc_html(date('d/m/Y H:i:s', strtotime($e->created_at))); ?></dd></div>
+                    </dl></div></td></tr>
+                <?php endforeach; endif; ?>
             </tbody>
         </table>
 
         <?php if ($total_pages > 1): ?>
-            <div class="tablenav bottom">
-                <div class="tablenav-pages">
-                    <?php
-                    echo paginate_links([
-                        'base'    => add_query_arg('paged', '%#%'),
-                        'format'  => '',
-                        'current' => $current,
-                        'total'   => $total_pages,
-                    ]);
-                    ?>
-                </div>
-            </div>
+        <div class="tablenav bottom"><div class="tablenav-pages">
+            <?php echo paginate_links(['base' => add_query_arg('paged', '%#%'), 'format' => '', 'current' => $current, 'total' => $total_pages]); ?>
+        </div></div>
         <?php endif; ?>
     </div>
     <?php
 }
 
-
-// ─── CSV EXPORT ──────────────────────────────────────────────────
-function eyworks_export_csv() {
-    global $wpdb;
-    $table   = $wpdb->prefix . 'eyworks_enquiries';
-    $entries = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC", ARRAY_A);
-
-    // Clear ALL output buffers — WordPress may have started rendering
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
-
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=tour-enquiries-' . date('Y-m-d') . '.csv');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-
-    $output = fopen('php://output', 'w');
-
-    // Headers
-    fputcsv($output, [
-        'ID', 'Child First Name', 'Child Last Name', 'Child DOB', 'Gender',
-        'Parent First Name', 'Parent Last Name', 'Email', 'Phone', 'Postcode',
-        'Preferred Start', 'Source', 'UTM Source', 'UTM Medium', 'UTM Campaign',
-        'EYWorks Status', 'EYWorks Ref', 'Date',
-    ]);
-
-    foreach ($entries as $row) {
-        fputcsv($output, [
-            $row['id'],
-            $row['child_first_name'],
-            $row['child_last_name'],
-            $row['child_dob'],
-            $row['child_gender'],
-            $row['parent_first_name'],
-            $row['parent_last_name'],
-            $row['parent_email'],
-            $row['phone'],
-            $row['postcode'],
-            $row['start_date'],
-            $row['source'],
-            $row['utm_source'],
-            $row['utm_medium'],
-            $row['utm_campaign'],
-            $row['eyworks_status'],
-            $row['eyworks_ref'],
-            $row['created_at'],
-        ]);
-    }
-
-    fclose($output);
-    die();
-}
+// ─── SETTINGS LINK ON PLUGINS PAGE ──────────────────────────────
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
+    $settings_link = '<a href="' . admin_url('admin.php?page=eyworks-settings') . '">Settings</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+});
