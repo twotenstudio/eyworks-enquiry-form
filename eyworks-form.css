@@ -31,15 +31,22 @@
     gap: 1rem;
     margin-bottom: 0;
     flex-wrap: wrap;
+    align-items: stretch;
 }
 
-.eyworks-field { margin-bottom: 1rem; }
+.eyworks-field {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
 .eyworks-full  { flex: 1 1 100%; }
 .eyworks-half  { flex: 1 1 calc(50% - 0.5rem); min-width: 200px; }
 .eyworks-third { flex: 1 1 calc(33.33% - 0.67rem); min-width: 140px; }
 
 .eyworks-field > label {
     display: block;
+    flex: 1;
     font-size: 0.875rem;
     font-weight: 500;
     margin-bottom: 0.35rem;
