@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 2.3.0
+ * Version: 2.5.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '2.3.0');
+define('EYWORKS_PLUGIN_VERSION', '2.5.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -270,7 +270,6 @@ function eyworks_settings_page() {
 // ─── ENQUEUE STYLES & SCRIPTS ────────────────────────────────────
 add_action('wp_enqueue_scripts', function () {
     wp_register_style('eyworks-form-css', EYWORKS_PLUGIN_URL . 'eyworks-form.css', [], EYWORKS_PLUGIN_VERSION);
-    wp_register_style('eyworks-form-fallback', EYWORKS_PLUGIN_URL . 'eyworks-form-fallback.css', [], EYWORKS_PLUGIN_VERSION);
     wp_register_script('eyworks-form-js', EYWORKS_PLUGIN_URL . 'eyworks-form.js', [], EYWORKS_PLUGIN_VERSION, true);
     wp_localize_script('eyworks-form-js', 'eyworksForm', [
         'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -323,12 +322,6 @@ add_shortcode('eyworks_enquiry_form', function () {
     wp_enqueue_style('eyworks-form-css');
     wp_enqueue_script('eyworks-form-js');
 
-    // Load fallback styles when Gravity Forms isn't active
-    if (!wp_style_is('gravity_forms_theme_reset_css', 'enqueued') && !wp_style_is('gravity_forms_theme_reset_css', 'registered')
-        && !wp_style_is('gforms_reset_css', 'enqueued') && !wp_style_is('gforms_reset_css', 'registered')) {
-        wp_enqueue_style('eyworks-form-fallback');
-    }
-
     $custom_css = eyworks_get_setting('custom_css');
     if (!empty($custom_css)) {
         wp_add_inline_style('eyworks-form-css', $custom_css);
@@ -349,7 +342,7 @@ add_shortcode('eyworks_enquiry_form', function () {
 
     ob_start();
     ?>
-    <div class="eyworks-form-wrapper gform_wrapper gravity-theme" id="eyworks-form-wrapper">
+    <div class="eyworks-form-wrapper" id="eyworks-form-wrapper">
 
         <div class="eyworks-success" id="eyworks-success" style="display:none;">
             <div class="eyworks-success-icon">&#10003;</div>
@@ -362,123 +355,103 @@ add_shortcode('eyworks_enquiry_form', function () {
         <div id="eyworks-form-container">
             <input type="hidden" id="ew-nursery" value="<?php echo esc_attr($nursery_id); ?>">
 
-            <div class="gform_body">
-                <div class="gform_fields top_label">
+            <h2 class="eyworks-section-title">Child Details</h2>
 
-                    <!-- ── Child Details ── -->
-                    <div class="gfield gfield--type-section gfield--width-full">
-                        <h2 class="gsection_title">Child Details</h2>
-                    </div>
+            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
+                <legend class="gfield_label gform-field-label gfield_label_before_complex">Child Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
+                <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
+                    <span class="name_first gform-grid-col gform-grid-col--size-auto">
+                        <input type="text" id="ew-child-first-name" maxlength="45" aria-required="true">
+                        <label for="ew-child-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
+                    </span>
+                    <span class="name_last gform-grid-col gform-grid-col--size-auto">
+                        <input type="text" id="ew-child-last-name" maxlength="60" aria-required="true">
+                        <label for="ew-child-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
+                    </span>
+                </div>
+            </fieldset>
 
-                    <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <legend class="gfield_label gform-field-label gfield_label_before_complex">Child Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
-                        <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
-                            <span class="name_first gform-grid-col gform-grid-col--size-auto">
-                                <input type="text" id="ew-child-first-name" maxlength="45" aria-required="true">
-                                <label for="ew-child-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
-                            </span>
-                            <span class="name_last gform-grid-col gform-grid-col--size-auto">
-                                <input type="text" id="ew-child-last-name" maxlength="60" aria-required="true">
-                                <label for="ew-child-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
-                            </span>
-                        </div>
-                    </fieldset>
-
-                    <div class="gfield gfield--type-date gfield--width-half field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-child-dob">Child Date of Birth / Expected DOB</label>
-                        <div class="ginput_container ginput_container_date">
-                            <input type="date" id="ew-child-dob" class="large">
-                        </div>
-                    </div>
-
-                    <div class="gfield gfield--type-select gfield--width-half field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-child-gender">Legal Gender</label>
-                        <div class="ginput_container ginput_container_select">
-                            <select id="ew-child-gender" class="large gfield_select">
-                                <option value="">Select (optional)...</option>
-                                <option value="Female">Female</option>
-                                <option value="Male">Male</option>
-                                <option value="Other">Unknown / Other</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- ── Parent / Guardian Details ── -->
-                    <div class="gfield gfield--type-section gfield--width-full">
-                        <h2 class="gsection_title">Parent / Guardian Details</h2>
-                    </div>
-
-                    <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <legend class="gfield_label gform-field-label gfield_label_before_complex">Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
-                        <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
-                            <span class="name_first gform-grid-col gform-grid-col--size-auto">
-                                <input type="text" id="ew-parent-first-name" maxlength="45" aria-required="true">
-                                <label for="ew-parent-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
-                            </span>
-                            <span class="name_last gform-grid-col gform-grid-col--size-auto">
-                                <input type="text" id="ew-parent-last-name" maxlength="60">
-                                <label for="ew-parent-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
-                            </span>
-                        </div>
-                    </fieldset>
-
-                    <div class="gfield gfield--type-email gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-parent-email">Email<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></label>
-                        <div class="ginput_container ginput_container_email">
-                            <input type="email" id="ew-parent-email" maxlength="45" class="large" aria-required="true">
-                        </div>
-                    </div>
-
-                    <div class="gfield gfield--type-phone gfield--width-half gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-phone">Phone<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></label>
-                        <div class="ginput_container ginput_container_phone">
-                            <input type="tel" id="ew-phone" maxlength="45" class="large" aria-required="true">
-                        </div>
-                    </div>
-
-                    <div class="gfield gfield--type-text gfield--width-half field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-postcode">Postal Code</label>
-                        <div class="ginput_container ginput_container_text">
-                            <input type="text" id="ew-postcode" maxlength="10" class="large">
-                        </div>
-                    </div>
-
-                    <!-- ── Preferences ── -->
-                    <div class="gfield gfield--type-section gfield--width-full">
-                        <h2 class="gsection_title">Preferences</h2>
-                    </div>
-
-                    <div class="gfield gfield--type-date gfield--width-half field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-start-date">Preferred Start Date</label>
-                        <div class="ginput_container ginput_container_date">
-                            <input type="date" id="ew-start-date" class="large" min="<?php echo date('Y-m-d'); ?>">
-                        </div>
-                    </div>
-
-                    <div class="gfield gfield--type-select gfield--width-half field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <label class="gfield_label gform-field-label" for="ew-source">How did you hear about us?</label>
-                        <div class="ginput_container ginput_container_select">
-                            <select id="ew-source" class="large gfield_select">
-                                <?php echo $source_options; ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="gfield gfield--type-consent gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                        <div class="ginput_container ginput_container_consent">
-                            <input type="checkbox" id="ew-agree-terms" value="1" class="gfield-choice-input" aria-required="true">
-                            <label for="ew-agree-terms" class="gform-field-label gform-field-label--type-sub">You agree to receive information from us via phone or email.</label>
-                        </div>
-                    </div>
-
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-child-dob">Child Date of Birth / Expected DOB</label>
+                    <input type="date" id="ew-child-dob">
+                </div>
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-child-gender">Legal Gender</label>
+                    <select id="ew-child-gender">
+                        <option value="">Select (optional)...</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Other">Unknown / Other</option>
+                    </select>
                 </div>
             </div>
 
-            <div class="gform_footer top_label">
-                <button type="button" id="eyworks-submit-btn" class="gform_button button">
-                    <span class="btn-text">Submit Enquiry</span>
-                    <span class="btn-loading" style="display:none;">Submitting...</span>
-                </button>
+            <h2 class="eyworks-section-title">Parent / Guardian Details</h2>
+
+            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
+                <legend class="gfield_label gform-field-label gfield_label_before_complex">Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
+                <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
+                    <span class="name_first gform-grid-col gform-grid-col--size-auto">
+                        <input type="text" id="ew-parent-first-name" maxlength="45" aria-required="true">
+                        <label for="ew-parent-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
+                    </span>
+                    <span class="name_last gform-grid-col gform-grid-col--size-auto">
+                        <input type="text" id="ew-parent-last-name" maxlength="60">
+                        <label for="ew-parent-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
+                    </span>
+                </div>
+            </fieldset>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-parent-email">Email <span class="eyworks-req">*</span></label>
+                    <input type="email" id="ew-parent-email" maxlength="45" required>
+                </div>
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-phone">Phone <span class="eyworks-req">*</span></label>
+                    <input type="tel" id="ew-phone" maxlength="45" required>
+                </div>
+            </div>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-postcode">Postal Code</label>
+                    <input type="text" id="ew-postcode" maxlength="10">
+                </div>
+            </div>
+
+            <h2 class="eyworks-section-title">Preferences</h2>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-start-date">Preferred Start Date</label>
+                    <input type="date" id="ew-start-date" min="<?php echo date('Y-m-d'); ?>">
+                </div>
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-source">How did you hear about us?</label>
+                    <select id="ew-source">
+                        <?php echo $source_options; ?>
+                    </select>
+                </div>
+            </div>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-full">
+                    <div class="eyworks-checkbox-wrap">
+                        <input type="checkbox" id="ew-agree-terms" value="1" class="eyworks-checkbox" required>
+                        <label for="ew-agree-terms" class="eyworks-consent-label">You agree to receive information from us via phone or email.</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-full">
+                    <button type="button" id="eyworks-submit-btn" class="eyworks-submit">
+                        <span class="btn-text">Submit Enquiry</span>
+                        <span class="btn-loading" style="display:none;">Submitting...</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
