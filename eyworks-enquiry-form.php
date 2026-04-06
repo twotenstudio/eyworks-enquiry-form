@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 2.2.0
+ * Version: 2.3.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '2.2.0');
+define('EYWORKS_PLUGIN_VERSION', '2.3.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -179,6 +179,22 @@ add_action('admin_init', function () {
             echo '<p class="description" style="color:#d63638;">Currently overridden by <code>EYWORKS_NOTIFY_EMAIL</code> in wp-config.php</p>';
         }
     }, 'eyworks-settings', 'eyworks_notifications');
+
+    // Custom CSS section
+    add_settings_section(
+        'eyworks_appearance',
+        'Appearance',
+        function () {
+            echo '<p>Customise the look and feel of the enquiry form.</p>';
+        },
+        'eyworks-settings'
+    );
+
+    add_settings_field('custom_css', 'Custom CSS', function () {
+        $val = eyworks_get_setting('custom_css');
+        echo '<textarea name="eyworks_settings[custom_css]" rows="10" class="large-text code" placeholder="/* e.g. change the submit button colour */&#10;.eyworks-submit { background: #333; }">' . esc_textarea($val) . '</textarea>';
+        echo '<p class="description">Add custom CSS to override the default form styles. These styles are scoped to the <code>.eyworks-form-wrapper</code> container.</p>';
+    }, 'eyworks-settings', 'eyworks_appearance');
 });
 
 function eyworks_sanitize_settings($input) {
@@ -186,6 +202,7 @@ function eyworks_sanitize_settings($input) {
     $sanitized['subdomain']    = sanitize_text_field($input['subdomain'] ?? '');
     $sanitized['api_token']    = sanitize_text_field($input['api_token'] ?? '');
     $sanitized['notify_email'] = sanitize_email($input['notify_email'] ?? '');
+    $sanitized['custom_css']   = wp_strip_all_tags($input['custom_css'] ?? '');
 
     // Clear metadata cache when settings change (so new nursery/source data loads)
     delete_transient('eyworks_enquiry_metadata');
@@ -304,6 +321,11 @@ add_shortcode('eyworks_enquiry_form', function () {
 
     wp_enqueue_style('eyworks-form-css');
     wp_enqueue_script('eyworks-form-js');
+
+    $custom_css = eyworks_get_setting('custom_css');
+    if (!empty($custom_css)) {
+        wp_add_inline_style('eyworks-form-css', $custom_css);
+    }
 
     $meta = eyworks_get_metadata();
 
@@ -787,6 +809,113 @@ function eyworks_admin_page() {
     </div>
     <?php
 }
+
+// ─── GITHUB AUTO-UPDATER ────────────────────────────────────────
+// Checks the public GitHub repo for new releases and integrates
+// with the WordPress plugin update system.
+
+define('EYWORKS_GITHUB_REPO', 'twotenstudio/eyworks-enquiry-form');
+
+add_filter('pre_set_site_transient_update_plugins', function ($transient) {
+    if (empty($transient->checked)) return $transient;
+
+    $response = wp_remote_get('https://api.github.com/repos/' . EYWORKS_GITHUB_REPO . '/releases/latest', [
+        'timeout' => 10,
+        'headers' => ['Accept' => 'application/vnd.github.v3+json'],
+    ]);
+
+    if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+        return $transient;
+    }
+
+    $release = json_decode(wp_remote_retrieve_body($response), true);
+    if (empty($release['tag_name'])) return $transient;
+
+    $remote_version = ltrim($release['tag_name'], 'v');
+    $plugin_file    = plugin_basename(__FILE__);
+
+    if (version_compare(EYWORKS_PLUGIN_VERSION, $remote_version, '<')) {
+        // Prefer a zip asset if attached; otherwise use the GitHub source zip
+        $download_url = $release['zipball_url'];
+        if (!empty($release['assets'])) {
+            foreach ($release['assets'] as $asset) {
+                if (substr($asset['name'], -4) === '.zip') {
+                    $download_url = $asset['browser_download_url'];
+                    break;
+                }
+            }
+        }
+
+        $transient->response[$plugin_file] = (object) [
+            'slug'        => 'eyworks-enquiry-form',
+            'plugin'      => $plugin_file,
+            'new_version' => $remote_version,
+            'url'         => 'https://github.com/' . EYWORKS_GITHUB_REPO,
+            'package'     => $download_url,
+        ];
+    }
+
+    return $transient;
+});
+
+// Show plugin info in the update details modal
+add_filter('plugins_api', function ($result, $action, $args) {
+    if ($action !== 'plugin_information' || ($args->slug ?? '') !== 'eyworks-enquiry-form') {
+        return $result;
+    }
+
+    $response = wp_remote_get('https://api.github.com/repos/' . EYWORKS_GITHUB_REPO . '/releases/latest', [
+        'timeout' => 10,
+        'headers' => ['Accept' => 'application/vnd.github.v3+json'],
+    ]);
+
+    if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+        return $result;
+    }
+
+    $release = json_decode(wp_remote_retrieve_body($response), true);
+    if (empty($release['tag_name'])) return $result;
+
+    return (object) [
+        'name'          => 'EYWorks Enquiry Form',
+        'slug'          => 'eyworks-enquiry-form',
+        'version'       => ltrim($release['tag_name'], 'v'),
+        'author'        => '<a href="https://twotenstudio.co.uk">Two Ten Studio</a>',
+        'homepage'      => 'https://github.com/' . EYWORKS_GITHUB_REPO,
+        'sections'      => [
+            'description'  => 'Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.',
+            'changelog'    => nl2br(esc_html($release['body'] ?? 'See GitHub for release notes.')),
+        ],
+        'download_link' => $release['zipball_url'],
+    ];
+}, 10, 3);
+
+// After installing from a GitHub zipball the folder is named owner-repo-hash.
+// Rename it back to the expected plugin directory so WordPress can activate it.
+add_filter('upgrader_post_install', function ($response, $hook_extra, $result) {
+    if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== plugin_basename(__FILE__)) {
+        return $response;
+    }
+
+    global $wp_filesystem;
+    $proper_destination = WP_PLUGIN_DIR . '/eyworks-enquiry-form';
+
+    // If the extracted folder already has the right name, nothing to do
+    if ($result['destination'] === $proper_destination . '/') {
+        return $response;
+    }
+
+    $wp_filesystem->move($result['destination'], $proper_destination);
+    $result['destination'] = $proper_destination . '/';
+
+    // Re-activate if it was active before the update
+    if (is_plugin_active($hook_extra['plugin'])) {
+        activate_plugin($hook_extra['plugin']);
+    }
+
+    return $response;
+}, 10, 3);
+
 
 // ─── SETTINGS LINK ON PLUGINS PAGE ──────────────────────────────
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
