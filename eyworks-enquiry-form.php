@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 2.5.0
+ * Version: 2.6.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '2.5.0');
+define('EYWORKS_PLUGIN_VERSION', '2.6.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -52,6 +52,10 @@ function eyworks_notify_email() {
 
 function eyworks_is_configured() {
     return !empty(eyworks_api_token()) && !empty(eyworks_api_base());
+}
+
+function eyworks_log_submissions() {
+    return eyworks_get_setting('log_submissions', '1') === '1';
 }
 
 
@@ -180,6 +184,22 @@ add_action('admin_init', function () {
         }
     }, 'eyworks-settings', 'eyworks_notifications');
 
+    // Data storage section
+    add_settings_section(
+        'eyworks_storage',
+        'Data Storage',
+        function () {
+            echo '<p>Control whether enquiry submissions are saved to the WordPress database. Submissions are always sent to EYWorks regardless of this setting.</p>';
+        },
+        'eyworks-settings'
+    );
+
+    add_settings_field('log_submissions', 'Log Submissions Locally', function () {
+        $val = eyworks_get_setting('log_submissions', '1');
+        echo '<label><input type="checkbox" name="eyworks_settings[log_submissions]" value="1"' . checked($val, '1', false) . '> Save enquiry submissions to the WordPress database</label>';
+        echo '<p class="description">When enabled, submissions appear in the Tour Enquiries dashboard and can be exported as CSV. When disabled, enquiries are still sent to EYWorks and email notifications still fire.</p>';
+    }, 'eyworks-settings', 'eyworks_storage');
+
     // Custom CSS section
     add_settings_section(
         'eyworks_appearance',
@@ -202,7 +222,8 @@ function eyworks_sanitize_settings($input) {
     $sanitized['subdomain']    = sanitize_text_field($input['subdomain'] ?? '');
     $sanitized['api_token']    = sanitize_text_field($input['api_token'] ?? '');
     $sanitized['notify_email'] = sanitize_email($input['notify_email'] ?? '');
-    $sanitized['custom_css']   = wp_strip_all_tags($input['custom_css'] ?? '');
+    $sanitized['custom_css']        = wp_strip_all_tags($input['custom_css'] ?? '');
+    $sanitized['log_submissions']   = !empty($input['log_submissions']) ? '1' : '0';
 
     // Clear metadata cache when settings change (so new nursery/source data loads)
     delete_transient('eyworks_enquiry_metadata');
@@ -559,41 +580,43 @@ function eyworks_handle_submission() {
         error_log('[EYWorks] Connection error: ' . $response->get_error_message());
     }
 
-    // ─── Save locally (always, even if EYWorks fails) ────────────
-    global $wpdb;
-    $table = $wpdb->prefix . 'eyworks_enquiries';
+    // ─── Save locally (if logging enabled) ─────────────────────────
+    if (eyworks_log_submissions()) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'eyworks_enquiries';
 
-    if ($wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table) {
-        error_log('[EYWorks] Table missing — creating now');
-        eyworks_create_table();
-    }
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table) {
+            error_log('[EYWorks] Table missing — creating now');
+            eyworks_create_table();
+        }
 
-    $insert_result = $wpdb->insert($table, [
-        'child_first_name'  => $first_name,
-        'child_last_name'   => $last_name,
-        'child_dob'         => !empty($dob) ? $dob : null,
-        'child_gender'      => $gender,
-        'parent_first_name' => $parent_first_name,
-        'parent_last_name'  => $parent_last_name,
-        'parent_email'      => $email,
-        'phone'             => $phone,
-        'postcode'          => $postcode,
-        'start_date'        => !empty($start_date) ? $start_date : null,
-        'source'            => $source_text,
-        'utm_source'        => $utm_source,
-        'utm_medium'        => $utm_medium,
-        'utm_campaign'      => $utm_campaign,
-        'utm_content'       => $utm_content,
-        'utm_term'          => $utm_term,
-        'eyworks_status'    => $eyworks_status,
-        'eyworks_ref'       => $eyworks_ref,
-        'created_at'        => current_time('mysql'),
-    ]);
+        $insert_result = $wpdb->insert($table, [
+            'child_first_name'  => $first_name,
+            'child_last_name'   => $last_name,
+            'child_dob'         => !empty($dob) ? $dob : null,
+            'child_gender'      => $gender,
+            'parent_first_name' => $parent_first_name,
+            'parent_last_name'  => $parent_last_name,
+            'parent_email'      => $email,
+            'phone'             => $phone,
+            'postcode'          => $postcode,
+            'start_date'        => !empty($start_date) ? $start_date : null,
+            'source'            => $source_text,
+            'utm_source'        => $utm_source,
+            'utm_medium'        => $utm_medium,
+            'utm_campaign'      => $utm_campaign,
+            'utm_content'       => $utm_content,
+            'utm_term'          => $utm_term,
+            'eyworks_status'    => $eyworks_status,
+            'eyworks_ref'       => $eyworks_ref,
+            'created_at'        => current_time('mysql'),
+        ]);
 
-    if ($insert_result === false) {
-        error_log('[EYWorks] DB insert FAILED: ' . $wpdb->last_error);
-    } else {
-        error_log('[EYWorks] Local entry saved: #' . $wpdb->insert_id . ' (EYWorks: ' . $eyworks_status . ')');
+        if ($insert_result === false) {
+            error_log('[EYWorks] DB insert FAILED: ' . $wpdb->last_error);
+        } else {
+            error_log('[EYWorks] Local entry saved: #' . $wpdb->insert_id . ' (EYWorks: ' . $eyworks_status . ')');
+        }
     }
 
     // ─── Send email notification ─────────────────────────────────
