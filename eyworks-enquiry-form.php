@@ -270,6 +270,7 @@ function eyworks_settings_page() {
 // ─── ENQUEUE STYLES & SCRIPTS ────────────────────────────────────
 add_action('wp_enqueue_scripts', function () {
     wp_register_style('eyworks-form-css', EYWORKS_PLUGIN_URL . 'eyworks-form.css', [], EYWORKS_PLUGIN_VERSION);
+    wp_register_style('eyworks-form-fallback', EYWORKS_PLUGIN_URL . 'eyworks-form-fallback.css', [], EYWORKS_PLUGIN_VERSION);
     wp_register_script('eyworks-form-js', EYWORKS_PLUGIN_URL . 'eyworks-form.js', [], EYWORKS_PLUGIN_VERSION, true);
     wp_localize_script('eyworks-form-js', 'eyworksForm', [
         'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -321,6 +322,12 @@ add_shortcode('eyworks_enquiry_form', function () {
 
     wp_enqueue_style('eyworks-form-css');
     wp_enqueue_script('eyworks-form-js');
+
+    // Load fallback styles when Gravity Forms isn't active
+    if (!wp_style_is('gravity_forms_theme_reset_css', 'enqueued') && !wp_style_is('gravity_forms_theme_reset_css', 'registered')
+        && !wp_style_is('gforms_reset_css', 'enqueued') && !wp_style_is('gforms_reset_css', 'registered')) {
+        wp_enqueue_style('eyworks-form-fallback');
+    }
 
     $custom_css = eyworks_get_setting('custom_css');
     if (!empty($custom_css)) {
