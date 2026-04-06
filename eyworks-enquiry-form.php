@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 2.6.0
+ * Version: 2.7.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '2.6.0');
+define('EYWORKS_PLUGIN_VERSION', '2.7.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
