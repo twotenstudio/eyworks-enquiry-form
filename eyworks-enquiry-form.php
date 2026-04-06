@@ -376,7 +376,7 @@ add_shortcode('eyworks_enquiry_form', function () {
         <div id="eyworks-form-container">
             <input type="hidden" id="ew-nursery" value="<?php echo esc_attr($nursery_id); ?>">
 
-            <h2 class="eyworks-section-title">Child Details</h2>
+            <h3 class="eyworks-section-title">Child Details</h3>
 
             <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
                 <legend class="gfield_label gform-field-label gfield_label_before_complex">Child Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
@@ -408,7 +408,7 @@ add_shortcode('eyworks_enquiry_form', function () {
                 </div>
             </div>
 
-            <h2 class="eyworks-section-title">Parent / Guardian Details</h2>
+            <h3 class="eyworks-section-title">Parent / Guardian Details</h3>
 
             <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
                 <legend class="gfield_label gform-field-label gfield_label_before_complex">Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
@@ -442,7 +442,7 @@ add_shortcode('eyworks_enquiry_form', function () {
                 </div>
             </div>
 
-            <h2 class="eyworks-section-title">Preferences</h2>
+            <h3 class="eyworks-section-title">Preferences</h3>
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
