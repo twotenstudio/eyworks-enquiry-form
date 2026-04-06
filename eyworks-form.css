@@ -1,4 +1,4 @@
-/* ─── EYWorks Enquiry Form v2.1 ────────────────────────────────── */
+/* ─── EYWorks Enquiry Form — GF-compatible styles ────────────── */
 
 .eyworks-form-wrapper {
     max-width: 720px;
@@ -6,178 +6,13 @@
     font-family: inherit;
 }
 
-.eyworks-section-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 2rem 0 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #f0f0f0;
-    color: #2d2d2d;
-}
-
-.eyworks-section-title:first-child {
-    margin-top: 0;
-}
-
-.eyworks-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0;
-    flex-wrap: wrap;
-}
-
-.eyworks-field { margin-bottom: 1rem; }
-.eyworks-full  { flex: 1 1 100%; }
-.eyworks-half  { flex: 1 1 calc(50% - 0.5rem); min-width: 200px; }
-.eyworks-third { flex: 1 1 calc(33.33% - 0.67rem); min-width: 140px; }
-
-.eyworks-field > label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-bottom: 0.35rem;
-    color: #444;
-}
-
-.eyworks-req { color: #e74c3c; }
-
-.eyworks-field input[type="text"],
-.eyworks-field input[type="email"],
-.eyworks-field input[type="tel"],
-.eyworks-field input[type="date"],
-.eyworks-field select {
-    width: 100%;
-    padding: 0.65rem 0.85rem;
-    font-size: 0.95rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    color: #333;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    box-sizing: border-box;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-}
-
-.eyworks-field select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 36px;
-}
-
-.eyworks-field input:focus,
-.eyworks-field select:focus {
-    outline: none;
-    border-color: #e8a87c;
-    box-shadow: 0 0 0 3px rgba(232, 168, 124, 0.2);
-}
-
-.eyworks-field input.eyworks-invalid,
-.eyworks-field select.eyworks-invalid {
-    border-color: #e74c3c;
-    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.12);
-}
-
-/* Checkbox (theme-proof) */
-.eyworks-checkbox-wrap {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
-    cursor: pointer;
-    padding: 12px 0;
-}
-
-.eyworks-checkbox-wrap input[type="checkbox"].eyworks-checkbox {
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
-    width: 20px !important;
-    height: 20px !important;
-    min-width: 20px !important;
-    min-height: 20px !important;
-    max-width: 20px !important;
-    max-height: 20px !important;
-    flex-shrink: 0 !important;
-    display: inline-block !important;
-    background: #fff !important;
-    border: 2px solid #aaa !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    position: relative !important;
-    vertical-align: top !important;
-    margin: 2px 0 0 0 !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    outline: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    clip: auto !important;
-    clip-path: none !important;
-    overflow: visible !important;
-}
-
-.eyworks-checkbox-wrap input[type="checkbox"].eyworks-checkbox:checked {
-    background: #e8a87c !important;
-    border-color: #e8a87c !important;
-}
-
-.eyworks-checkbox-wrap input[type="checkbox"].eyworks-checkbox:checked::after {
-    content: '' !important;
-    display: block !important;
-    position: absolute !important;
-    left: 5px !important;
-    top: 1px !important;
-    width: 6px !important;
-    height: 11px !important;
-    border: solid #fff !important;
-    border-width: 0 2px 2px 0 !important;
-    transform: rotate(45deg) !important;
-}
-
-.eyworks-checkbox-wrap input[type="checkbox"].eyworks-checkbox:focus {
-    box-shadow: 0 0 0 3px rgba(232, 168, 124, 0.3) !important;
-}
-
-.eyworks-checkbox-wrap input[type="checkbox"].eyworks-checkbox.eyworks-invalid {
+/* Validation — applied by JS via .eyworks-invalid */
+.eyworks-form-wrapper .eyworks-invalid {
     border-color: #e74c3c !important;
     box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.12) !important;
 }
 
-.eyworks-consent-label {
-    font-size: 0.9rem !important;
-    font-weight: 400 !important;
-    color: #555 !important;
-    line-height: 1.5 !important;
-    cursor: pointer !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* Submit */
-.eyworks-submit {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.8rem 2.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-    background: #e8a87c;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.2s ease, transform 0.1s ease;
-    min-width: 200px;
-}
-
-.eyworks-submit:hover { background: #d9956a; }
-.eyworks-submit:active { transform: scale(0.98); }
-.eyworks-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-/* Success / Error */
+/* Success */
 .eyworks-success {
     text-align: center;
     padding: 3rem 2rem;
@@ -201,6 +36,7 @@
 .eyworks-success h3 { font-size: 1.5rem; margin: 0 0 0.5rem; color: #2d2d2d; }
 .eyworks-success p { font-size: 1rem; color: #666; margin: 0; }
 
+/* Error */
 .eyworks-error {
     background: #fef2f2;
     border: 1px solid #fecaca;
@@ -213,7 +49,5 @@
 
 .eyworks-error a { color: #991b1b; font-weight: 600; }
 
-@media (max-width: 600px) {
-    .eyworks-half, .eyworks-third { flex: 1 1 100%; }
-    .eyworks-submit { width: 100%; }
-}
+/* Loading state */
+.eyworks-form-wrapper .gform_button:disabled { opacity: 0.6; cursor: not-allowed; }
