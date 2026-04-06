@@ -94,6 +94,40 @@
     margin: 0 0 1rem;
 }
 
+.eyworks-form-wrapper .gform-grid-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.eyworks-form-wrapper .gform-grid-col--size-auto {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 200px;
+}
+
+.eyworks-form-wrapper .gform-grid-col input[type="text"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.95rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+
+.eyworks-form-wrapper .gform-grid-col input[type="text"]:focus {
+    outline: none;
+    border-color: #e8a87c;
+    box-shadow: 0 0 0 3px rgba(232, 168, 124, 0.2);
+}
+
+.eyworks-form-wrapper .gform-grid-col input[type="text"].eyworks-invalid {
+    border-color: #e74c3c;
+    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.12);
+}
+
 /* Checkbox (theme-proof) */
 .eyworks-checkbox-wrap {
     display: flex !important;
