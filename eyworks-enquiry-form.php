@@ -882,6 +882,15 @@ add_filter('pre_set_site_transient_update_plugins', function ($transient) {
             'url'         => 'https://github.com/' . EYWORKS_GITHUB_REPO,
             'package'     => $download_url,
         ];
+    } else {
+        // Tell WordPress we checked and are up-to-date, so it clears any stale update notices
+        $transient->no_update[$plugin_file] = (object) [
+            'slug'        => 'eyworks-enquiry-form',
+            'plugin'      => $plugin_file,
+            'new_version' => EYWORKS_PLUGIN_VERSION,
+            'url'         => 'https://github.com/' . EYWORKS_GITHUB_REPO,
+        ];
+        unset($transient->response[$plugin_file]);
     }
 
     return $transient;
