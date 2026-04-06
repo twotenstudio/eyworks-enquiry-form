@@ -921,5 +921,35 @@ add_filter('upgrader_post_install', function ($response, $hook_extra, $result) {
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
     $settings_link = '<a href="' . admin_url('admin.php?page=eyworks-settings') . '">Settings</a>';
     array_unshift($links, $settings_link);
+
+    $check_url = wp_nonce_url(admin_url('plugins.php?eyworks_check_update=1'), 'eyworks_check_update');
+    $links[] = '<a href="' . esc_url($check_url) . '">Check for updates</a>';
+
     return $links;
+});
+
+// Handle the "Check for updates" click — clear the transient so WordPress re-checks
+add_action('admin_init', function () {
+    if (empty($_GET['eyworks_check_update'])) return;
+    if (!wp_verify_nonce($_GET['_wpnonce'] ?? '', 'eyworks_check_update')) return;
+    if (!current_user_can('update_plugins')) return;
+
+    delete_site_transient('update_plugins');
+    wp_update_plugins();
+
+    wp_safe_redirect(admin_url('plugins.php?eyworks_updated=1'));
+    exit;
+});
+
+// Show an admin notice after the check completes
+add_action('admin_notices', function () {
+    if (empty($_GET['eyworks_updated']) || !current_user_can('update_plugins')) return;
+    $transient = get_site_transient('update_plugins');
+    $plugin_file = plugin_basename(EYWORKS_PLUGIN_DIR . 'eyworks-enquiry-form.php');
+    if (!empty($transient->response[$plugin_file])) {
+        $new = $transient->response[$plugin_file]->new_version;
+        echo '<div class="notice notice-warning is-dismissible"><p><strong>EYWorks Enquiry Form:</strong> Version ' . esc_html($new) . ' is available. <a href="' . esc_url(self_admin_url('update-core.php')) . '">Update now</a>.</p></div>';
+    } else {
+        echo '<div class="notice notice-success is-dismissible"><p><strong>EYWorks Enquiry Form:</strong> You are running the latest version (' . EYWORKS_PLUGIN_VERSION . ').</p></div>';
+    }
 });
