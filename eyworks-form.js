@@ -43,12 +43,18 @@
 
             // Validate mandatory
             var requiredMap = {
-                first_name:        'ew-child-first-name',
-                last_name:         'ew-child-last-name',
-                parent_first_name: 'ew-parent-first-name',
-                email:             'ew-parent-email',
-                phone:             'ew-phone',
-                agree_terms:       'ew-agree-terms'
+                first_name:           'ew-child-first-name',
+                last_name:            'ew-child-last-name',
+                dob:                  'ew-child-dob',
+                gender:               'ew-child-gender',
+                parent_first_name:    'ew-parent-first-name',
+                parent_last_name:     'ew-parent-last-name',
+                email:                'ew-parent-email',
+                phone:                'ew-phone',
+                postcode:             'ew-postcode',
+                preffered_start_date: 'ew-start-date',
+                source:               'ew-source',
+                agree_terms:          'ew-agree-terms'
             };
 
             var valid = true;

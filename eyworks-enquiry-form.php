@@ -394,13 +394,13 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-child-dob">Child Date of Birth / Expected DOB</label>
-                    <input type="date" id="ew-child-dob">
+                    <label for="ew-child-dob">Child Date of Birth / Expected DOB <span class="eyworks-req">*</span></label>
+                    <input type="date" id="ew-child-dob" aria-required="true" required>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-child-gender">Legal Gender</label>
-                    <select id="ew-child-gender">
-                        <option value="">Select (optional)...</option>
+                    <label for="ew-child-gender">Legal Gender <span class="eyworks-req">*</span></label>
+                    <select id="ew-child-gender" aria-required="true" required>
+                        <option value="">Select...</option>
                         <option value="Female">Female</option>
                         <option value="Male">Male</option>
                         <option value="Other">Unknown / Other</option>
@@ -418,7 +418,7 @@ add_shortcode('eyworks_enquiry_form', function () {
                         <label for="ew-parent-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
                     </span>
                     <span class="name_last gform-grid-col gform-grid-col--size-auto">
-                        <input type="text" id="ew-parent-last-name" maxlength="60">
+                        <input type="text" id="ew-parent-last-name" maxlength="60" aria-required="true">
                         <label for="ew-parent-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
                     </span>
                 </div>
@@ -437,8 +437,8 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-postcode">Postal Code</label>
-                    <input type="text" id="ew-postcode" maxlength="10">
+                    <label for="ew-postcode">Postal Code <span class="eyworks-req">*</span></label>
+                    <input type="text" id="ew-postcode" maxlength="10" aria-required="true" required>
                 </div>
             </div>
 
@@ -446,12 +446,12 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-start-date">Preferred Start Date</label>
-                    <input type="date" id="ew-start-date" min="<?php echo date('Y-m-d'); ?>">
+                    <label for="ew-start-date">Preferred Start Date <span class="eyworks-req">*</span></label>
+                    <input type="date" id="ew-start-date" min="<?php echo date('Y-m-d'); ?>" aria-required="true" required>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-source">How did you hear about us?</label>
-                    <select id="ew-source">
+                    <label for="ew-source">How did you hear about us? <span class="eyworks-req">*</span></label>
+                    <select id="ew-source" aria-required="true" required>
                         <?php echo $source_options; ?>
                     </select>
                 </div>
@@ -517,7 +517,10 @@ function eyworks_handle_submission() {
 
     // Validate mandatory
     if (empty($nursery) || empty($first_name) || empty($last_name)
-        || empty($parent_first_name) || empty($email) || empty($phone)) {
+        || empty($dob) || empty($gender)
+        || empty($parent_first_name) || empty($parent_last_name)
+        || empty($email) || empty($phone)
+        || empty($postcode) || empty($start_date) || empty($source)) {
         wp_send_json_error(['message' => 'Please fill in all required fields.']);
     }
 
@@ -540,11 +543,12 @@ function eyworks_handle_submission() {
         'utm_term'          => $utm_term,
     ];
 
-    if (!empty($parent_last_name)) $payload['parent_last_name'] = $parent_last_name;
-    if (!empty($dob))              $payload['dob'] = $dob;
-    if (!empty($postcode))         $payload['postcode'] = $postcode;
-    if (!empty($start_date))       $payload['preffered_start_date'] = $start_date;
-    if (!empty($source))           $payload['source'] = $source;
+    $payload['parent_last_name']     = $parent_last_name;
+    $payload['dob']                  = $dob;
+    $payload['gender']               = $gender;
+    $payload['postcode']             = $postcode;
+    $payload['preffered_start_date'] = $start_date;
+    $payload['source']               = $source;
 
     // ─── POST to EYWorks ─────────────────────────────────────────
     $api_url   = eyworks_api_base() . '/enquiryPost';
