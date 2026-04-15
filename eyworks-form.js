@@ -41,15 +41,8 @@
                 agree_terms:          document.getElementById('ew-agree-terms').checked ? '1' : ''
             };
 
-            // Validate mandatory
-            var requiredMap = {
-                first_name:        'ew-child-first-name',
-                last_name:         'ew-child-last-name',
-                parent_first_name: 'ew-parent-first-name',
-                email:             'ew-parent-email',
-                phone:             'ew-phone',
-                agree_terms:       'ew-agree-terms'
-            };
+            // Validate mandatory (configured via Settings → Required Fields)
+            var requiredMap = eyworksForm.requiredMap || {};
 
             var valid = true;
             Object.keys(requiredMap).forEach(function (key) {
