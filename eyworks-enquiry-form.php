@@ -58,6 +58,40 @@ function eyworks_log_submissions() {
     return eyworks_get_setting('log_submissions', '1') === '1';
 }
 
+function eyworks_required_fields() {
+    $defaults = ['child_first_name', 'child_last_name', 'parent_first_name', 'email', 'phone', 'agree_terms'];
+    $settings = get_option('eyworks_settings', []);
+    if (isset($settings['required_fields']) && is_array($settings['required_fields'])) {
+        return $settings['required_fields'];
+    }
+    return $defaults;
+}
+
+function eyworks_required_fields_map() {
+    $map = [
+        'child_first_name' => ['js_key' => 'first_name',           'element_id' => 'ew-child-first-name'],
+        'child_last_name'  => ['js_key' => 'last_name',            'element_id' => 'ew-child-last-name'],
+        'child_dob'        => ['js_key' => 'dob',                  'element_id' => 'ew-child-dob'],
+        'child_gender'     => ['js_key' => 'gender',               'element_id' => 'ew-child-gender'],
+        'parent_first_name'=> ['js_key' => 'parent_first_name',    'element_id' => 'ew-parent-first-name'],
+        'parent_last_name' => ['js_key' => 'parent_last_name',     'element_id' => 'ew-parent-last-name'],
+        'email'            => ['js_key' => 'email',                'element_id' => 'ew-parent-email'],
+        'phone'            => ['js_key' => 'phone',                'element_id' => 'ew-phone'],
+        'postcode'         => ['js_key' => 'postcode',             'element_id' => 'ew-postcode'],
+        'start_date'       => ['js_key' => 'preffered_start_date', 'element_id' => 'ew-start-date'],
+        'source'           => ['js_key' => 'source',               'element_id' => 'ew-source'],
+        'agree_terms'      => ['js_key' => 'agree_terms',          'element_id' => 'ew-agree-terms'],
+    ];
+    $required = eyworks_required_fields();
+    $js_map = [];
+    foreach ($required as $key) {
+        if (isset($map[$key])) {
+            $js_map[$map[$key]['js_key']] = $map[$key]['element_id'];
+        }
+    }
+    return $js_map;
+}
+
 
 // ─── DATABASE TABLE ──────────────────────────────────────────────
 register_activation_hook(__FILE__, 'eyworks_create_table');
@@ -200,6 +234,39 @@ add_action('admin_init', function () {
         echo '<p class="description">When enabled, submissions appear in the Tour Enquiries dashboard and can be exported as CSV. When disabled, enquiries are still sent to EYWorks and email notifications still fire.</p>';
     }, 'eyworks-settings', 'eyworks_storage');
 
+    // Required Fields section
+    add_settings_section(
+        'eyworks_required_fields',
+        'Required Fields',
+        function () {
+            echo '<p>Choose which fields are compulsory on the enquiry form. Checked fields must be filled in before the form can be submitted.</p>';
+        },
+        'eyworks-settings'
+    );
+
+    add_settings_field('required_fields', 'Compulsory Fields', function () {
+        $required = eyworks_required_fields();
+        $all_fields = [
+            'child_first_name' => 'Child First Name',
+            'child_last_name'  => 'Child Last Name',
+            'child_dob'        => 'Child Date of Birth',
+            'child_gender'     => 'Child Gender',
+            'parent_first_name'=> 'Parent/Guardian First Name',
+            'parent_last_name' => 'Parent/Guardian Last Name',
+            'email'            => 'Email',
+            'phone'            => 'Phone',
+            'postcode'         => 'Postal Code',
+            'start_date'       => 'Preferred Start Date',
+            'source'           => 'How did you hear about us?',
+            'agree_terms'      => 'Consent Checkbox',
+        ];
+        foreach ($all_fields as $key => $label) {
+            $checked = in_array($key, $required) ? ' checked' : '';
+            echo '<label style="display:block;margin-bottom:6px;"><input type="checkbox" name="eyworks_settings[required_fields][]" value="' . esc_attr($key) . '"' . $checked . '> ' . esc_html($label) . '</label>';
+        }
+        echo '<p class="description">Select which fields visitors must complete before submitting the form.</p>';
+    }, 'eyworks-settings', 'eyworks_required_fields');
+
     // Custom CSS section
     add_settings_section(
         'eyworks_appearance',
@@ -224,6 +291,19 @@ function eyworks_sanitize_settings($input) {
     $sanitized['notify_email'] = sanitize_email($input['notify_email'] ?? '');
     $sanitized['custom_css']        = wp_strip_all_tags($input['custom_css'] ?? '');
     $sanitized['log_submissions']   = !empty($input['log_submissions']) ? '1' : '0';
+
+    // Required fields
+    $valid_fields = ['child_first_name', 'child_last_name', 'child_dob', 'child_gender',
+                     'parent_first_name', 'parent_last_name', 'email', 'phone',
+                     'postcode', 'start_date', 'source', 'agree_terms'];
+    $sanitized['required_fields'] = [];
+    if (!empty($input['required_fields']) && is_array($input['required_fields'])) {
+        foreach ($input['required_fields'] as $field) {
+            if (in_array($field, $valid_fields, true)) {
+                $sanitized['required_fields'][] = $field;
+            }
+        }
+    }
 
     // Clear metadata cache when settings change (so new nursery/source data loads)
     delete_transient('eyworks_enquiry_metadata');
@@ -292,9 +372,11 @@ function eyworks_settings_page() {
 add_action('wp_enqueue_scripts', function () {
     wp_register_style('eyworks-form-css', EYWORKS_PLUGIN_URL . 'eyworks-form.css', [], EYWORKS_PLUGIN_VERSION);
     wp_register_script('eyworks-form-js', EYWORKS_PLUGIN_URL . 'eyworks-form.js', [], EYWORKS_PLUGIN_VERSION, true);
+    $required_map = eyworks_required_fields_map();
     wp_localize_script('eyworks-form-js', 'eyworksForm', [
-        'ajaxUrl' => admin_url('admin-ajax.php'),
-        'nonce'   => wp_create_nonce('eyworks_enquiry_nonce'),
+        'ajaxUrl'     => admin_url('admin-ajax.php'),
+        'nonce'       => wp_create_nonce('eyworks_enquiry_nonce'),
+        'requiredMap' => !empty($required_map) ? $required_map : new stdClass(),
     ]);
 });
 
@@ -348,7 +430,8 @@ add_shortcode('eyworks_enquiry_form', function () {
         wp_add_inline_style('eyworks-form-css', $custom_css);
     }
 
-    $meta = eyworks_get_metadata();
+    $meta     = eyworks_get_metadata();
+    $required = eyworks_required_fields();
 
     // Nursery (hidden)
     $nursery_id = !empty($meta['nursery'][0]['id']) ? $meta['nursery'][0]['id'] : base64_encode('1');
@@ -378,15 +461,16 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <h3 class="eyworks-section-title">Child Details</h3>
 
-            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                <legend class="gfield_label gform-field-label gfield_label_before_complex">Child Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
+            <?php $child_name_req = in_array('child_first_name', $required) || in_array('child_last_name', $required); ?>
+            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full <?php echo $child_name_req ? 'gfield_contains_required' : ''; ?> field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
+                <legend class="gfield_label gform-field-label gfield_label_before_complex">Child Name<?php if ($child_name_req): ?><span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span><?php endif; ?></legend>
                 <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
                     <span class="name_first gform-grid-col gform-grid-col--size-auto">
-                        <input type="text" id="ew-child-first-name" maxlength="45" aria-required="true">
+                        <input type="text" id="ew-child-first-name" maxlength="45"<?php if (in_array('child_first_name', $required)) echo ' aria-required="true"'; ?>>
                         <label for="ew-child-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
                     </span>
                     <span class="name_last gform-grid-col gform-grid-col--size-auto">
-                        <input type="text" id="ew-child-last-name" maxlength="60" aria-required="true">
+                        <input type="text" id="ew-child-last-name" maxlength="60"<?php if (in_array('child_last_name', $required)) echo ' aria-required="true"'; ?>>
                         <label for="ew-child-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
                     </span>
                 </div>
@@ -394,13 +478,13 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-child-dob">Child Date of Birth / Expected DOB</label>
-                    <input type="date" id="ew-child-dob">
+                    <label for="ew-child-dob">Child Date of Birth / Expected DOB <?php if (in_array('child_dob', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="date" id="ew-child-dob"<?php if (in_array('child_dob', $required)) echo ' aria-required="true"'; ?>>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-child-gender">Legal Gender</label>
+                    <label for="ew-child-gender">Legal Gender <?php if (in_array('child_gender', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
                     <select id="ew-child-gender">
-                        <option value="">Select (optional)...</option>
+                        <option value="">Select<?php echo in_array('child_gender', $required) ? '...' : ' (optional)...'; ?></option>
                         <option value="Female">Female</option>
                         <option value="Male">Male</option>
                         <option value="Other">Unknown / Other</option>
@@ -410,15 +494,16 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <h3 class="eyworks-section-title">Parent / Guardian Details</h3>
 
-            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full gfield_contains_required field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
-                <legend class="gfield_label gform-field-label gfield_label_before_complex">Name<span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span></legend>
+            <?php $parent_name_req = in_array('parent_first_name', $required) || in_array('parent_last_name', $required); ?>
+            <fieldset class="gfield gfield--type-name gfield--input-type-name gfield--width-full <?php echo $parent_name_req ? 'gfield_contains_required' : ''; ?> field_sublabel_below gfield--no-description field_description_below gfield_visibility_visible">
+                <legend class="gfield_label gform-field-label gfield_label_before_complex">Name<?php if ($parent_name_req): ?><span class="gfield_required"><span class="gfield_required gfield_required_asterisk">*</span></span><?php endif; ?></legend>
                 <div class="ginput_complex ginput_container ginput_container--name no_prefix has_first_name no_middle_name has_last_name no_suffix gf_name_has_2 ginput_container_name gform-grid-row">
                     <span class="name_first gform-grid-col gform-grid-col--size-auto">
-                        <input type="text" id="ew-parent-first-name" maxlength="45" aria-required="true">
+                        <input type="text" id="ew-parent-first-name" maxlength="45"<?php if (in_array('parent_first_name', $required)) echo ' aria-required="true"'; ?>>
                         <label for="ew-parent-first-name" class="gform-field-label gform-field-label--type-sub">First</label>
                     </span>
                     <span class="name_last gform-grid-col gform-grid-col--size-auto">
-                        <input type="text" id="ew-parent-last-name" maxlength="60">
+                        <input type="text" id="ew-parent-last-name" maxlength="60"<?php if (in_array('parent_last_name', $required)) echo ' aria-required="true"'; ?>>
                         <label for="ew-parent-last-name" class="gform-field-label gform-field-label--type-sub">Last</label>
                     </span>
                 </div>
@@ -426,19 +511,19 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-parent-email">Email <span class="eyworks-req">*</span></label>
-                    <input type="email" id="ew-parent-email" maxlength="45" required>
+                    <label for="ew-parent-email">Email <?php if (in_array('email', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="email" id="ew-parent-email" maxlength="45"<?php if (in_array('email', $required)) echo ' required aria-required="true"'; ?>>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-phone">Phone <span class="eyworks-req">*</span></label>
-                    <input type="tel" id="ew-phone" maxlength="45" required>
+                    <label for="ew-phone">Phone <?php if (in_array('phone', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="tel" id="ew-phone" maxlength="45"<?php if (in_array('phone', $required)) echo ' required aria-required="true"'; ?>>
                 </div>
             </div>
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-postcode">Postal Code</label>
-                    <input type="text" id="ew-postcode" maxlength="10">
+                    <label for="ew-postcode">Postal Code <?php if (in_array('postcode', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="text" id="ew-postcode" maxlength="10"<?php if (in_array('postcode', $required)) echo ' aria-required="true"'; ?>>
                 </div>
             </div>
 
@@ -446,12 +531,12 @@ add_shortcode('eyworks_enquiry_form', function () {
 
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-start-date">Preferred Start Date</label>
-                    <input type="date" id="ew-start-date" min="<?php echo date('Y-m-d'); ?>">
+                    <label for="ew-start-date">Preferred Start Date <?php if (in_array('start_date', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="date" id="ew-start-date" min="<?php echo date('Y-m-d'); ?>"<?php if (in_array('start_date', $required)) echo ' aria-required="true"'; ?>>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-source">How did you hear about us?</label>
-                    <select id="ew-source">
+                    <label for="ew-source">How did you hear about us? <?php if (in_array('source', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <select id="ew-source"<?php if (in_array('source', $required)) echo ' aria-required="true"'; ?>>
                         <?php echo $source_options; ?>
                     </select>
                 </div>
@@ -460,8 +545,8 @@ add_shortcode('eyworks_enquiry_form', function () {
             <div class="eyworks-row">
                 <div class="eyworks-field eyworks-full">
                     <div class="eyworks-checkbox-wrap">
-                        <input type="checkbox" id="ew-agree-terms" value="1" class="eyworks-checkbox" required>
-                        <label for="ew-agree-terms" class="eyworks-consent-label">You agree to receive information from us via phone or email.</label>
+                        <input type="checkbox" id="ew-agree-terms" value="1" class="eyworks-checkbox"<?php if (in_array('agree_terms', $required)) echo ' required aria-required="true"'; ?>>
+                        <label for="ew-agree-terms" class="eyworks-consent-label">You agree to receive information from us via phone or email.<?php if (in_array('agree_terms', $required)) echo ' <span class="eyworks-req">*</span>'; ?></label>
                     </div>
                 </div>
             </div>
@@ -515,13 +600,33 @@ function eyworks_handle_submission() {
     $utm_content  = sanitize_text_field($_POST['utm_content'] ?? '');
     $utm_term     = sanitize_text_field($_POST['utm_term'] ?? '');
 
-    // Validate mandatory
-    if (empty($nursery) || empty($first_name) || empty($last_name)
-        || empty($parent_first_name) || empty($email) || empty($phone)) {
+    // Validate mandatory (nursery is always required)
+    if (empty($nursery)) {
         wp_send_json_error(['message' => 'Please fill in all required fields.']);
     }
 
-    if (!is_email($email)) {
+    $required = eyworks_required_fields();
+    $field_values = [
+        'child_first_name' => $first_name,
+        'child_last_name'  => $last_name,
+        'child_dob'        => $dob,
+        'child_gender'     => $gender,
+        'parent_first_name'=> $parent_first_name,
+        'parent_last_name' => $parent_last_name,
+        'email'            => $email,
+        'phone'            => $phone,
+        'postcode'         => $postcode,
+        'start_date'       => $start_date,
+        'source'           => $source,
+    ];
+    foreach ($required as $key) {
+        if ($key === 'agree_terms') continue; // Frontend-only
+        if (isset($field_values[$key]) && empty($field_values[$key])) {
+            wp_send_json_error(['message' => 'Please fill in all required fields.']);
+        }
+    }
+
+    if (!empty($email) && !is_email($email)) {
         wp_send_json_error(['message' => 'Please enter a valid email address.']);
     }
 
