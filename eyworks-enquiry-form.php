@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 2.10.0
+ * Version: 3.0.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '2.10.0');
+define('EYWORKS_PLUGIN_VERSION', '3.0.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -114,6 +114,7 @@ function eyworks_create_table() {
         postcode varchar(20) DEFAULT '',
         start_date date DEFAULT NULL,
         source varchar(100) DEFAULT '',
+        nursery_name varchar(200) DEFAULT '',
         utm_source varchar(200) DEFAULT '',
         utm_medium varchar(200) DEFAULT '',
         utm_campaign varchar(200) DEFAULT '',
@@ -318,11 +319,16 @@ function eyworks_settings_page() {
 
         <?php
         // Connection status
+        $meta = null;
         if (eyworks_is_configured()) {
             $meta = eyworks_get_metadata();
             if ($meta) {
-                $nursery_name = $meta['nursery'][0]['name'] ?? 'Unknown';
-                echo '<div class="notice notice-success"><p><strong>&#10003; Connected to EYWorks</strong> — Nursery: ' . esc_html($nursery_name) . '</p></div>';
+                $nursery_names = [];
+                foreach ((array) ($meta['nursery'] ?? []) as $n) {
+                    if (!empty($n['name'])) $nursery_names[] = trim($n['name']);
+                }
+                $label = count($nursery_names) > 1 ? 'Nurseries' : 'Nursery';
+                echo '<div class="notice notice-success"><p><strong>&#10003; Connected to EYWorks</strong> — ' . $label . ': ' . esc_html($nursery_names ? implode(', ', $nursery_names) : 'Unknown') . '</p></div>';
             } else {
                 echo '<div class="notice notice-warning"><p><strong>&#9888; Connection issue</strong> — Credentials are set but could not fetch data from EYWorks. Please check your subdomain and API token.</p></div>';
             }
@@ -344,6 +350,20 @@ function eyworks_settings_page() {
         <p>Add the enquiry form to any page or post using this shortcode:</p>
         <p><code>[eyworks_enquiry_form]</code></p>
         <p>The form fields (sources, nurseries, sessions) are automatically loaded from your EYWorks account.</p>
+
+        <?php
+        $account_nurseries = (!empty($meta['nursery']) && is_array($meta['nursery'])) ? $meta['nursery'] : [];
+        if (count($account_nurseries) > 1) {
+            echo '<h3>Multiple Nurseries</h3>';
+            echo '<p>This EYWorks account has <strong>' . count($account_nurseries) . ' nurseries</strong>. Without a <code>nursery</code> attribute the form submits to the first one (' . esc_html(trim($account_nurseries[0]['name'] ?? '')) . '). Use the shortcodes below to point a form at a specific nursery — they also work on any other WordPress site connected with the same subdomain and API token:</p>';
+            echo '<table class="widefat" style="max-width:600px;"><thead><tr><th>Nursery</th><th>Shortcode</th></tr></thead><tbody>';
+            foreach ($account_nurseries as $n) {
+                echo '<tr><td>' . esc_html(trim($n['name'] ?? '')) . '</td><td><code>[eyworks_enquiry_form nursery="' . esc_html(eyworks_display_nursery_id($n['id'] ?? '')) . '"]</code></td></tr>';
+            }
+            echo '</tbody></table>';
+            echo '<p class="description" style="margin-top:6px;">The <code>nursery</code> attribute also accepts the nursery name exactly as shown above. The list refreshes when you save settings, or automatically every 12 hours. One form per page.</p>';
+        }
+        ?>
 
         <hr>
         <h2>GTM Tracking</h2>
@@ -411,8 +431,66 @@ function eyworks_get_metadata() {
 }
 
 
+// ─── HELPER: Multi-nursery support ──────────────────────────────
+// An EYWorks account can contain several nurseries (branches); the
+// enquirySettings response lists them all and enquiryPost accepts any
+// of their IDs, so one set of credentials serves every branch.
+
+// Resolve the `nursery` shortcode attribute to an EYWorks nursery ID.
+// Accepts a raw numeric ID ("2"), an encoded API ID ("Mg=="), or the
+// nursery name as shown in EYWorks. Empty means the account default
+// (first nursery — original behaviour). Returns null if unresolvable.
+function eyworks_resolve_nursery_id($requested, $meta) {
+    $nurseries = (!empty($meta['nursery']) && is_array($meta['nursery'])) ? $meta['nursery'] : [];
+
+    $requested = trim((string) $requested);
+    if ($requested === '') {
+        return !empty($nurseries[0]['id']) ? $nurseries[0]['id'] : base64_encode('1');
+    }
+
+    // Raw numeric ID — EYWorks expects it base64-encoded. Not checked
+    // against cached metadata so a newly added branch works immediately.
+    if (ctype_digit($requested)) return base64_encode($requested);
+
+    // Already an encoded API ID
+    foreach ($nurseries as $n) {
+        if (isset($n['id']) && (string) $n['id'] === $requested) return $n['id'];
+    }
+    $decoded = base64_decode($requested, true);
+    if ($decoded !== false && ctype_digit($decoded)) return $requested;
+
+    // Nursery name as shown in EYWorks
+    foreach ($nurseries as $n) {
+        if (isset($n['name']) && strcasecmp(trim($n['name']), $requested) === 0) return $n['id'];
+    }
+
+    return null;
+}
+
+// Look up a nursery's display name from its encoded ID.
+function eyworks_nursery_name($nursery_id, $meta = null) {
+    if ($meta === null) $meta = eyworks_get_metadata();
+    if (!empty($meta['nursery']) && is_array($meta['nursery'])) {
+        foreach ($meta['nursery'] as $n) {
+            if (isset($n['id']) && (string) $n['id'] === (string) $nursery_id) {
+                return trim($n['name'] ?? '');
+            }
+        }
+    }
+    return '';
+}
+
+// Show the human-friendly numeric ID where possible (API IDs are base64).
+function eyworks_display_nursery_id($encoded_id) {
+    $raw = base64_decode((string) $encoded_id, true);
+    return ($raw !== false && ctype_digit($raw)) ? $raw : (string) $encoded_id;
+}
+
+
 // ─── SHORTCODE ───────────────────────────────────────────────────
-add_shortcode('eyworks_enquiry_form', function () {
+add_shortcode('eyworks_enquiry_form', function ($atts) {
+    $atts = shortcode_atts(['nursery' => ''], $atts, 'eyworks_enquiry_form');
+
     if (!eyworks_is_configured()) {
         if (current_user_can('manage_options')) {
             return '<div class="eyworks-error" style="padding:1rem;border:1px solid #fecaca;border-radius:6px;background:#fef2f2;color:#991b1b;">
@@ -433,8 +511,22 @@ add_shortcode('eyworks_enquiry_form', function () {
     $meta     = eyworks_get_metadata();
     $required = eyworks_required_fields();
 
-    // Nursery (hidden)
-    $nursery_id = !empty($meta['nursery'][0]['id']) ? $meta['nursery'][0]['id'] : base64_encode('1');
+    // Which nursery this form submits to (account default unless the
+    // shortcode's `nursery` attribute says otherwise)
+    $nursery_id     = eyworks_resolve_nursery_id($atts['nursery'], $meta);
+    $nursery_notice = '';
+    if ($nursery_id === null) {
+        $nursery_id = eyworks_resolve_nursery_id('', $meta);
+        if (current_user_can('manage_options')) {
+            $available = [];
+            foreach ((array) ($meta['nursery'] ?? []) as $n) {
+                $available[] = trim($n['name'] ?? '') . ' — nursery="' . eyworks_display_nursery_id($n['id'] ?? '') . '"';
+            }
+            $nursery_notice = '<div class="eyworks-error" style="padding:1rem;border:1px solid #fde68a;border-radius:6px;background:#fffbeb;color:#92400e;margin-bottom:1rem;">
+                <p><strong>EYWorks Enquiry Form:</strong> Nursery &quot;' . esc_html($atts['nursery']) . '&quot; was not found on this EYWorks account, so the form below is using the account default. Available: ' . esc_html($available ? implode(' | ', $available) : 'none — check the API connection on the Settings page') . '. Only administrators see this notice.</p>
+            </div>';
+        }
+    }
 
     // Source options
     $source_options = '<option value="">Select...</option>';
@@ -447,6 +539,8 @@ add_shortcode('eyworks_enquiry_form', function () {
     ob_start();
     ?>
     <div class="eyworks-form-wrapper" id="eyworks-form-wrapper">
+
+        <?php echo $nursery_notice; // Admin-only warning, already escaped ?>
 
         <div class="eyworks-success" id="eyworks-success" style="display:none;">
             <div class="eyworks-success-icon">&#10003;</div>
@@ -685,6 +779,9 @@ function eyworks_handle_submission() {
         error_log('[EYWorks] Connection error: ' . $response->get_error_message());
     }
 
+    // Which branch this enquiry was for (used in logs and notifications)
+    $nursery_name = eyworks_nursery_name($nursery);
+
     // ─── Save locally (if logging enabled) ─────────────────────────
     if (eyworks_log_submissions()) {
         global $wpdb;
@@ -707,6 +804,7 @@ function eyworks_handle_submission() {
             'postcode'          => $postcode,
             'start_date'        => !empty($start_date) ? $start_date : null,
             'source'            => $source_text,
+            'nursery_name'      => $nursery_name,
             'utm_source'        => $utm_source,
             'utm_medium'        => $utm_medium,
             'utm_campaign'      => $utm_campaign,
@@ -726,6 +824,7 @@ function eyworks_handle_submission() {
 
     // ─── Send email notification ─────────────────────────────────
     eyworks_send_notification_email([
+        'nursery'     => $nursery_name,
         'child_name'  => $first_name . ' ' . $last_name,
         'child_dob'   => $dob,
         'gender'      => $gender,
@@ -750,8 +849,10 @@ function eyworks_handle_submission() {
 function eyworks_send_notification_email($data) {
     $to      = eyworks_notify_email();
     $subject = 'New Tour Enquiry: ' . $data['child_name'];
+    if (!empty($data['nursery'])) $subject .= ' (' . $data['nursery'] . ')';
 
     $body  = "A new tour enquiry has been submitted.\n\n";
+    if (!empty($data['nursery'])) $body .= "Nursery: {$data['nursery']}\n";
     $body .= "Child: {$data['child_name']}\n";
     if (!empty($data['child_dob']))  $body .= "DOB: {$data['child_dob']}\n";
     if (!empty($data['gender']))     $body .= "Gender: {$data['gender']}\n";
@@ -796,7 +897,7 @@ function eyworks_export_csv() {
     fputcsv($output, [
         'ID', 'Child First Name', 'Child Last Name', 'Child DOB', 'Gender',
         'Parent First Name', 'Parent Last Name', 'Email', 'Phone', 'Postcode',
-        'Preferred Start', 'Source', 'UTM Source', 'UTM Medium', 'UTM Campaign',
+        'Preferred Start', 'Source', 'Nursery', 'UTM Source', 'UTM Medium', 'UTM Campaign',
         'EYWorks Status', 'EYWorks Ref', 'Date',
     ]);
 
@@ -806,6 +907,7 @@ function eyworks_export_csv() {
             $row['child_dob'], $row['child_gender'], $row['parent_first_name'],
             $row['parent_last_name'], $row['parent_email'], $row['phone'],
             $row['postcode'], $row['start_date'], $row['source'],
+            $row['nursery_name'] ?? '',
             $row['utm_source'], $row['utm_medium'], $row['utm_campaign'],
             $row['eyworks_status'], $row['eyworks_ref'], $row['created_at'],
         ]);
@@ -923,6 +1025,9 @@ function eyworks_admin_page() {
                         <div><dt>Postcode</dt><dd><?php echo esc_html($e->postcode ?: '—'); ?></dd></div>
                         <div><dt>Preferred Start</dt><dd><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></dd></div>
                         <div><dt>Source</dt><dd><?php echo esc_html($e->source ?: '—'); ?></dd></div>
+                        <?php if (!empty($e->nursery_name)): ?>
+                        <div><dt>Nursery</dt><dd><?php echo esc_html($e->nursery_name); ?></dd></div>
+                        <?php endif; ?>
                         <div><dt>EYWorks</dt><dd><?php echo $e->eyworks_status === 'sent' ? '<span style="color:#27ae60;">&#10003; Sent</span>' . ($e->eyworks_ref ? '<br><small>Ref: ' . esc_html($e->eyworks_ref) . '</small>' : '') : '<span style="color:#e74c3c;">&#10007; Failed</span>'; ?></dd></div>
                         <?php if ($e->utm_source || $e->utm_medium || $e->utm_campaign): ?>
                         <div><dt>UTM Source</dt><dd><?php echo esc_html($e->utm_source ?: '—'); ?></dd></div>

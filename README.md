@@ -11,6 +11,7 @@ The default EYWorks iframe form can't be tracked by Google Tag Manager (cross-or
 ## Features
 
 - **EYWorks API integration** — submits enquiries directly via the EYWorks `/api/enquiryPost` endpoint
+- **Multi-nursery support** — point each form at any nursery (branch) on your EYWorks account via the `nursery` shortcode attribute
 - **Local storage** — every enquiry is saved to your WordPress database, even if EYWorks is down
 - **Admin dashboard** — searchable, paginated list of all enquiries with expandable detail view
 - **CSV export** — one-click export of all enquiries
@@ -52,6 +53,28 @@ Add this shortcode to any page or post:
 The form automatically loads source options (e.g. "Google", "Friend/Family") from your EYWorks account.
 
 Works with Elementor, Gutenberg, WPBakery, or any page builder that supports shortcodes.
+
+## Multiple nurseries on one EYWorks account
+
+If your EYWorks account has more than one nursery (branch) — they all share the same `*.eylog.co.uk` subdomain and Enquiries token — each form can be pointed at a specific nursery with the `nursery` shortcode attribute:
+
+```
+[eyworks_enquiry_form nursery="2"]
+```
+
+The attribute accepts the nursery's numeric ID, the encoded ID from the API, or the nursery's name exactly as it appears in EYWorks:
+
+```
+[eyworks_enquiry_form nursery="Oak House Nursery"]
+```
+
+- Without the attribute, the form submits to the first nursery on the account (same behaviour as previous versions).
+- **Tour Enquiries → Settings** lists every nursery on the connected account with a ready-made shortcode for each.
+- Running a branch's form on a separate WordPress site? Install the plugin there, enter the **same** subdomain and API token, and use the `nursery` attribute to target the right branch.
+- Each enquiry is logged with its nursery name in the dashboard, CSV export, and notification emails (subject and body).
+- If the attribute doesn't match any nursery on the account, the form falls back to the account default and shows a warning that only logged-in administrators can see.
+
+Note: only one enquiry form per page is supported.
 
 ## Google Tag Manager
 
@@ -121,6 +144,12 @@ eyworks-enquiry-form/
 - An active EYWorks account with API access enabled
 
 ## Changelog
+
+### 3.0.0
+- Multi-nursery support: new `nursery` shortcode attribute targets any nursery on the account (by numeric ID, encoded ID, or name)
+- Settings page lists all nurseries on the connected account with a ready-made shortcode for each
+- Enquiries are logged with their nursery name (dashboard detail view, CSV export, email subject and body)
+- Admin-only warning when a shortcode's `nursery` attribute doesn't match the account
 
 ### 2.2.0
 - Added Settings screen for configurable EYWorks connection

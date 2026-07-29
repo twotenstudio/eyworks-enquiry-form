@@ -1,5 +1,5 @@
 /**
- * EYWorks Enquiry Form v2.1 — AJAX + GTM + UTM passthrough
+ * EYWorks Enquiry Form v3.0.0 — AJAX + GTM + UTM passthrough
  */
 (function () {
     'use strict';
