@@ -145,7 +145,7 @@ eyworks-enquiry-form/
 
 ## Changelog
 
-### 2.11.0
+### 3.0.0
 - Multi-nursery support: new `nursery` shortcode attribute targets any nursery on the account (by numeric ID, encoded ID, or name)
 - Settings page lists all nurseries on the connected account with a ready-made shortcode for each
 - Enquiries are logged with their nursery name (dashboard detail view, CSV export, email subject and body)
