@@ -3,7 +3,7 @@
  * Plugin Name: EYWorks Enquiry Form
  * Plugin URI: https://github.com/twotenstudio/eyworks-enquiry-form
  * Description: Customisable enquiry form for EYWorks-powered nurseries with API integration, GTM tracking, local storage, email notifications, and admin dashboard.
- * Version: 3.0.0
+ * Version: 3.1.0
  * Author: Two Ten Studio
  * Author URI: https://twotenstudio.co.uk
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EYWORKS_PLUGIN_VERSION', '3.0.0');
+define('EYWORKS_PLUGIN_VERSION', '3.1.0');
 define('EYWORKS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EYWORKS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -80,6 +80,9 @@ function eyworks_required_fields_map() {
         'postcode'         => ['js_key' => 'postcode',             'element_id' => 'ew-postcode'],
         'start_date'       => ['js_key' => 'preffered_start_date', 'element_id' => 'ew-start-date'],
         'source'           => ['js_key' => 'source',               'element_id' => 'ew-source'],
+        'preferred_session'   => ['js_key' => 'preferred_session',   'element_id' => 'ew-preferred-session'],
+        'attendance_schedule' => ['js_key' => 'attendance_schedule', 'element_id' => 'ew-attendance-schedule'],
+        'notes'            => ['js_key' => 'notes',                'element_id' => 'ew-notes'],
         'agree_terms'      => ['js_key' => 'agree_terms',          'element_id' => 'ew-agree-terms'],
     ];
     $required = eyworks_required_fields();
@@ -114,6 +117,9 @@ function eyworks_create_table() {
         postcode varchar(20) DEFAULT '',
         start_date date DEFAULT NULL,
         source varchar(100) DEFAULT '',
+        preferred_session varchar(255) DEFAULT '',
+        attendance_schedule varchar(50) DEFAULT '',
+        notes text,
         nursery_name varchar(200) DEFAULT '',
         utm_source varchar(200) DEFAULT '',
         utm_medium varchar(200) DEFAULT '',
@@ -255,10 +261,13 @@ add_action('admin_init', function () {
             'parent_first_name'=> 'Parent/Guardian First Name',
             'parent_last_name' => 'Parent/Guardian Last Name',
             'email'            => 'Email',
-            'phone'            => 'Phone',
+            'phone'            => 'Mobile Phone',
             'postcode'         => 'Postal Code',
             'start_date'       => 'Preferred Start Date',
             'source'           => 'How did you hear about us?',
+            'preferred_session'   => 'Preferred Session',
+            'attendance_schedule' => 'Attendance Schedule',
+            'notes'            => 'Notes',
             'agree_terms'      => 'Consent Checkbox',
         ];
         foreach ($all_fields as $key => $label) {
@@ -296,7 +305,8 @@ function eyworks_sanitize_settings($input) {
     // Required fields
     $valid_fields = ['child_first_name', 'child_last_name', 'child_dob', 'child_gender',
                      'parent_first_name', 'parent_last_name', 'email', 'phone',
-                     'postcode', 'start_date', 'source', 'agree_terms'];
+                     'postcode', 'start_date', 'source', 'preferred_session',
+                     'attendance_schedule', 'notes', 'agree_terms'];
     $sanitized['required_fields'] = [];
     if (!empty($input['required_fields']) && is_array($input['required_fields'])) {
         foreach ($input['required_fields'] as $field) {
@@ -487,6 +497,25 @@ function eyworks_display_nursery_id($encoded_id) {
 }
 
 
+// ─── HELPER: Fields with no EYWorks API equivalent ──────────────
+// enquiryPost has no attendance schedule field and the account has no
+// preferred sessions set up, so both are sent to EYWorks inside `notes`.
+
+// Same options as the EYWorks-hosted enquiry form
+function eyworks_attendance_schedules() {
+    return ['Term Time Only', 'All Year Round'];
+}
+
+function eyworks_build_notes($preferred_session, $attendance_schedule, $notes) {
+    $lines = [];
+    if ($preferred_session !== '')   $lines[] = 'Preferred session: ' . $preferred_session;
+    if ($attendance_schedule !== '') $lines[] = 'Attendance schedule: ' . $attendance_schedule;
+    if ($notes !== '')               $lines[] = 'Notes: ' . $notes;
+    // EYWorks caps enquiry notes at 5000 characters
+    return mb_substr(implode("\n", $lines), 0, 5000);
+}
+
+
 // ─── SHORTCODE ───────────────────────────────────────────────────
 add_shortcode('eyworks_enquiry_form', function ($atts) {
     $atts = shortcode_atts(['nursery' => ''], $atts, 'eyworks_enquiry_form');
@@ -609,7 +638,7 @@ add_shortcode('eyworks_enquiry_form', function ($atts) {
                     <input type="email" id="ew-parent-email" maxlength="45"<?php if (in_array('email', $required)) echo ' required aria-required="true"'; ?>>
                 </div>
                 <div class="eyworks-field eyworks-half">
-                    <label for="ew-phone">Phone <?php if (in_array('phone', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <label for="ew-phone">Mobile Phone <?php if (in_array('phone', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
                     <input type="tel" id="ew-phone" maxlength="45"<?php if (in_array('phone', $required)) echo ' required aria-required="true"'; ?>>
                 </div>
             </div>
@@ -633,6 +662,30 @@ add_shortcode('eyworks_enquiry_form', function ($atts) {
                     <select id="ew-source"<?php if (in_array('source', $required)) echo ' aria-required="true"'; ?>>
                         <?php echo $source_options; ?>
                     </select>
+                </div>
+            </div>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-preferred-session">Preferred Session <?php if (in_array('preferred_session', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <input type="text" id="ew-preferred-session" maxlength="200" placeholder="e.g. Mondays and Wednesdays"<?php if (in_array('preferred_session', $required)) echo ' aria-required="true"'; ?>>
+                </div>
+                <div class="eyworks-field eyworks-half">
+                    <label for="ew-attendance-schedule">Attendance Schedule <?php if (in_array('attendance_schedule', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <select id="ew-attendance-schedule"<?php if (in_array('attendance_schedule', $required)) echo ' aria-required="true"'; ?>>
+                        <option value="">Select...</option>
+                        <?php foreach (eyworks_attendance_schedules() as $schedule): ?>
+                        <option value="<?php echo esc_attr($schedule); ?>"><?php echo esc_html($schedule); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
+            <div class="eyworks-row">
+                <div class="eyworks-field eyworks-full">
+                    <label for="ew-notes">Notes <?php if (in_array('notes', $required)) echo '<span class="eyworks-req">*</span>'; ?></label>
+                    <p class="eyworks-field-description" id="ew-notes-description">Are you entitled to the 30 hours government funding? Yes or no</p>
+                    <textarea id="ew-notes" rows="4" maxlength="4000" aria-describedby="ew-notes-description"<?php if (in_array('notes', $required)) echo ' aria-required="true"'; ?>></textarea>
                 </div>
             </div>
 
@@ -687,6 +740,13 @@ function eyworks_handle_submission() {
     $start_date        = sanitize_text_field($_POST['preffered_start_date'] ?? '');
     $source            = sanitize_text_field($_POST['source'] ?? '');
     $source_text       = sanitize_text_field($_POST['source_text'] ?? '');
+    $preferred_session = sanitize_text_field($_POST['preferred_session'] ?? '');
+    $attendance_schedule = sanitize_text_field($_POST['attendance_schedule'] ?? '');
+    $notes             = sanitize_textarea_field($_POST['notes'] ?? '');
+
+    if (!in_array($attendance_schedule, eyworks_attendance_schedules(), true)) {
+        $attendance_schedule = '';
+    }
 
     $utm_source   = sanitize_text_field($_POST['utm_source'] ?? '');
     $utm_medium   = sanitize_text_field($_POST['utm_medium'] ?? '');
@@ -712,6 +772,9 @@ function eyworks_handle_submission() {
         'postcode'         => $postcode,
         'start_date'       => $start_date,
         'source'           => $source,
+        'preferred_session'   => $preferred_session,
+        'attendance_schedule' => $attendance_schedule,
+        'notes'            => $notes,
     ];
     foreach ($required as $key) {
         if ($key === 'agree_terms') continue; // Frontend-only
@@ -744,6 +807,9 @@ function eyworks_handle_submission() {
     if (!empty($postcode))         $payload['postcode'] = $postcode;
     if (!empty($start_date))       $payload['preffered_start_date'] = $start_date;
     if (!empty($source))           $payload['source'] = $source;
+
+    $eyworks_notes = eyworks_build_notes($preferred_session, $attendance_schedule, $notes);
+    if ($eyworks_notes !== '')     $payload['notes'] = $eyworks_notes;
 
     // ─── POST to EYWorks ─────────────────────────────────────────
     $api_url   = eyworks_api_base() . '/enquiryPost';
@@ -804,6 +870,9 @@ function eyworks_handle_submission() {
             'postcode'          => $postcode,
             'start_date'        => !empty($start_date) ? $start_date : null,
             'source'            => $source_text,
+            'preferred_session' => $preferred_session,
+            'attendance_schedule' => $attendance_schedule,
+            'notes'             => $notes,
             'nursery_name'      => $nursery_name,
             'utm_source'        => $utm_source,
             'utm_medium'        => $utm_medium,
@@ -834,6 +903,9 @@ function eyworks_handle_submission() {
         'postcode'    => $postcode,
         'start_date'  => $start_date,
         'source'      => $source_text,
+        'preferred_session'   => $preferred_session,
+        'attendance_schedule' => $attendance_schedule,
+        'notes'       => $notes,
     ]);
 
     // ─── Return response ─────────────────────────────────────────
@@ -862,6 +934,9 @@ function eyworks_send_notification_email($data) {
     if (!empty($data['postcode']))   $body .= "Postcode: {$data['postcode']}\n";
     if (!empty($data['start_date'])) $body .= "Preferred Start: {$data['start_date']}\n";
     if (!empty($data['source']))     $body .= "Source: {$data['source']}\n";
+    if (!empty($data['preferred_session']))   $body .= "Preferred Session: {$data['preferred_session']}\n";
+    if (!empty($data['attendance_schedule'])) $body .= "Attendance Schedule: {$data['attendance_schedule']}\n";
+    if (!empty($data['notes']))      $body .= "Notes:\n{$data['notes']}\n";
 
     $body .= "\n---\nView all enquiries in WordPress: " . admin_url('admin.php?page=eyworks-enquiries');
 
@@ -897,7 +972,8 @@ function eyworks_export_csv() {
     fputcsv($output, [
         'ID', 'Child First Name', 'Child Last Name', 'Child DOB', 'Gender',
         'Parent First Name', 'Parent Last Name', 'Email', 'Phone', 'Postcode',
-        'Preferred Start', 'Source', 'Nursery', 'UTM Source', 'UTM Medium', 'UTM Campaign',
+        'Preferred Start', 'Source', 'Preferred Session', 'Attendance Schedule', 'Notes',
+        'Nursery', 'UTM Source', 'UTM Medium', 'UTM Campaign',
         'EYWorks Status', 'EYWorks Ref', 'Date',
     ]);
 
@@ -907,6 +983,7 @@ function eyworks_export_csv() {
             $row['child_dob'], $row['child_gender'], $row['parent_first_name'],
             $row['parent_last_name'], $row['parent_email'], $row['phone'],
             $row['postcode'], $row['start_date'], $row['source'],
+            $row['preferred_session'] ?? '', $row['attendance_schedule'] ?? '', $row['notes'] ?? '',
             $row['nursery_name'] ?? '',
             $row['utm_source'], $row['utm_medium'], $row['utm_campaign'],
             $row['eyworks_status'], $row['eyworks_ref'], $row['created_at'],
@@ -1025,6 +1102,9 @@ function eyworks_admin_page() {
                         <div><dt>Postcode</dt><dd><?php echo esc_html($e->postcode ?: '—'); ?></dd></div>
                         <div><dt>Preferred Start</dt><dd><?php echo $e->start_date ? esc_html(date('d/m/Y', strtotime($e->start_date))) : '—'; ?></dd></div>
                         <div><dt>Source</dt><dd><?php echo esc_html($e->source ?: '—'); ?></dd></div>
+                        <div><dt>Preferred Session</dt><dd><?php echo esc_html($e->preferred_session ?: '—'); ?></dd></div>
+                        <div><dt>Attendance Schedule</dt><dd><?php echo esc_html($e->attendance_schedule ?: '—'); ?></dd></div>
+                        <div style="grid-column:1/-1;"><dt>Notes</dt><dd><?php echo !empty($e->notes) ? nl2br(esc_html($e->notes)) : '—'; ?></dd></div>
                         <?php if (!empty($e->nursery_name)): ?>
                         <div><dt>Nursery</dt><dd><?php echo esc_html($e->nursery_name); ?></dd></div>
                         <?php endif; ?>

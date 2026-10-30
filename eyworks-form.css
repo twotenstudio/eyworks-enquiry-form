@@ -1,4 +1,4 @@
-/* ─── EYWorks Enquiry Form v3.0.0 ──────────────────────────────── */
+/* ─── EYWorks Enquiry Form v3.1.0 ──────────────────────────────── */
 
 .eyworks-form-wrapper {
     max-width: 720px;
@@ -59,7 +59,8 @@
 .eyworks-field input[type="email"],
 .eyworks-field input[type="tel"],
 .eyworks-field input[type="date"],
-.eyworks-field select {
+.eyworks-field select,
+.eyworks-field textarea {
     width: 100%;
     padding: 0.65rem 0.85rem;
     font-size: 0.95rem;
@@ -81,15 +82,31 @@
     padding-right: 36px;
 }
 
+.eyworks-field textarea {
+    height: auto;
+    min-height: 120px;
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
+.eyworks-field-description {
+    font-size: 0.875rem;
+    color: #444;
+    margin: 0 0 0.5rem;
+}
+
 .eyworks-field input:focus,
-.eyworks-field select:focus {
+.eyworks-field select:focus,
+.eyworks-field textarea:focus {
     outline: none;
     border-color: #e8a87c;
     box-shadow: 0 0 0 3px rgba(232, 168, 124, 0.2);
 }
 
 .eyworks-field input.eyworks-invalid,
-.eyworks-field select.eyworks-invalid {
+.eyworks-field select.eyworks-invalid,
+.eyworks-field textarea.eyworks-invalid {
     border-color: #e74c3c;
     box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.12);
 }

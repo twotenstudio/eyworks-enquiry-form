@@ -1,5 +1,5 @@
 /**
- * EYWorks Enquiry Form v3.0.0 — AJAX + GTM + UTM passthrough
+ * EYWorks Enquiry Form v3.1.0 — AJAX + GTM + UTM passthrough
  */
 (function () {
     'use strict';
@@ -38,7 +38,10 @@
                 preffered_start_date: val('ew-start-date'),
                 source:               val('ew-source'),
                 source_text:          sourceText,
-                agree_terms:          document.getElementById('ew-agree-terms').checked ? '1' : ''
+                preferred_session:    val('ew-preferred-session'),
+                attendance_schedule:  val('ew-attendance-schedule'),
+                notes:                val('ew-notes'),
+                agree_terms:         document.getElementById('ew-agree-terms').checked ? '1' : ''
             };
 
             // Validate mandatory (configured via Settings → Required Fields)

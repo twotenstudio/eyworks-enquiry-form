@@ -145,6 +145,12 @@ eyworks-enquiry-form/
 
 ## Changelog
 
+### 3.1.0
+- New fields: Preferred Session, Attendance Schedule (Term Time Only / All Year Round) and Notes, with a "30 hours government funding" prompt above the Notes box
+- EYWorks' `enquiryPost` has no attendance schedule field, so all three are sent to EYWorks in the enquiry's `notes`
+- Phone field relabelled "Mobile Phone" (EYWorks stores it as the parent's mobile)
+- New fields can be made compulsory under Settings → Required Fields, and appear in the dashboard detail view, CSV export and notification emails
+
 ### 3.0.0
 - Multi-nursery support: new `nursery` shortcode attribute targets any nursery on the account (by numeric ID, encoded ID, or name)
 - Settings page lists all nurseries on the connected account with a ready-made shortcode for each
